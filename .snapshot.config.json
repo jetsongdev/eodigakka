@@ -1,0 +1,10 @@
+{
+  "rootDir": "docs/snapshots",
+  "url": "http://localhost:3002",
+  "viewport": { "width": 1440, "height": 900 },
+  "extraViewports": [
+    { "name": "mobile", "width": 390, "height": 844 }
+  ],
+  "waitForText": "폴리곤",
+  "extraWaitMs": 6000
+}
