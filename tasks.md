@@ -137,6 +137,22 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ---
 
+## Phase B — 운영 모니터링 (운영 데이터 누적 후 결정)
+
+ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시점에 도입 검토.
+
+- [ ] **Healthchecks.io ping** — `run_etl.sh` 끝에 `curl -fsS -m 10 --retry 3 https://hc-ping.com/<UUID>` 한 줄. 새벽 03:00에 안 돌면 이메일/Telegram 알림. 무료 tier 충분.
+- [ ] **/api/health 외부 ping** — Uptime Kuma 셀프호스트 또는 Healthchecks.io의 HTTP check로 5분마다 ping
+- [ ] (확장 시) **Grafana Cloud 무료 tier** — agent로 logs 송신, ETL 트렌드 시계열 시각화
+- [ ] (서비스화 단계) **Grafana + Loki 셀프호스트** — 풀 컨트롤, RAM ~1GB
+
+트리거 조건:
+- 데이터 카운트 5배 이상 증가 (서울 25구 + 경기 인접 확장 시)
+- ETL 실패 자가 인지가 늦어 데이터 1~2일 비는 사고 발생 시
+- 다른 사람이 동참하기 시작 시
+
+---
+
 ## Phase 3 — 수도권 확장 (경기도) — Phase 2 후 재평가
 
 서울만으로 후보가 부족하면 경기도 인접 시 확장. SPEC §3 비목표(`경기도`)는 **Phase 2 이후**라는 보류 표현이지 영구 제외 아님.
