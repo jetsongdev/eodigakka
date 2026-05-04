@@ -28,15 +28,16 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 ## Phase 1 — 강북 14구 매매 + 전세 ETL → 색칠지도 1장
 
 ### DB 셋업
-- [ ] docker-compose.yml 작성 (postgres 16 + postgis)
-- [ ] `db/schema.sql` 작성 (§5.1 raw 테이블, ADR-002 컬럼명 반영)
-- [ ] `db/views.sql` 작성 (§5.2 mv_dong_stats, §5.3 mv_jeonse_ratio, ADR-005/006 반영)
-- [ ] 법정동 GeoJSON 로드 (`db/load_polygon.py`) — EPSG:5174→4326 변환
+- [x] docker-compose.yml 작성 (postgres 16 + postgis)
+- [x] `db/schema.sql` 작성 (§5.1 raw 테이블, ADR-002 컬럼명 반영)
+- [x] `db/views.sql` 작성 (§5.2 mv_dong_stats, §5.3 mv_jeonse_ratio, ADR-005/006 반영)
+- [x] 법정동 GeoJSON 로드 (`db/load_polygon.py`) — 427개 동 적재 완료
 
 ### ETL
-- [ ] `etl/pyproject.toml` 작성 (PublicDataReader, sqlalchemy, python-dotenv)
-- [ ] `etl/fetch_rtms.py` 작성 (§9.1 기준, GANGBUK_14, kill switch 포함)
-- [ ] ETL 1회 수동 실행 → `tx_apt_trade` row count 확인
+- [x] `etl/pyproject.toml` 작성 (PublicDataReader, psycopg2-binary, python-dotenv)
+- [x] `etl/fetch_rtms.py` 작성 (§9.1 기준, GANGBUK_14, kill switch 포함)
+- [x] `filter_cancelled` 버그 수정 — translate=True 시 NaN→"nan" 문제 (TIL 2026-05-04)
+- [x] ETL 1회 수동 실행 → `tx_apt_trade` row count 확인 (trade 5,476건 / rent 3,977건)
 - [ ] cron 설정 (Mac M4 Pro, `0 3 * * *`)
 
 ### API

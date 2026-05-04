@@ -157,7 +157,9 @@ def apply_bjd_fallback(df: pd.DataFrame, lookup: dict[tuple[str, str], str]) -> 
 def filter_cancelled(df: pd.DataFrame) -> pd.DataFrame:
     if "해제여부" not in df.columns:
         return df
-    active = df["해제여부"].apply(lambda value: normalize_text(value) is None)
+    active = df["해제여부"].apply(
+        lambda value: str(value).strip().upper() != "O"
+    )
     return df.loc[active].copy()
 
 
@@ -322,15 +324,13 @@ def insert_rent_rows(conn: psycopg2.extensions.connection, rows: list[tuple[Any,
     return len(rows)
 
 
-def refresh_materialized_views(conn: psycopg2.extensions.connection) -> None:
-    previous_autocommit = conn.autocommit
-    conn.autocommit = True
-    try:
+def refresh_materialized_views(dsn: str) -> None:
+    # CONCURRENTLY는 트랜잭션 밖(autocommit)에서만 실행 가능 → 별도 커넥션 사용
+    with psycopg2.connect(dsn) as conn:
+        conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dong_stats")
             cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_jeonse_ratio")
-    finally:
-        conn.autocommit = previous_autocommit
 
 
 def main() -> int:
@@ -362,7 +362,7 @@ def main() -> int:
                         conn, normalize_rent_df(rent_df, lookup)
                     )
 
-            refresh_materialized_views(conn)
+            refresh_materialized_views(db_config.dsn)
             update_etl_status(conn, succeeded=True, refreshed=True)
             print(
                 f"ETL completed: trade_rows_seen={trade_rows_inserted}, "

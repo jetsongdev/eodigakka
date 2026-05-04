@@ -4,6 +4,19 @@
 
 ---
 
+## [2026-05-04] ETL trade_rows_seen=0 버그 수정
+
+### 수정
+- `etl/fetch_rtms.py` `filter_cancelled` — `해제여부` 필터 로직 수정
+  - 원인: `translate=True` 시 NaN이 문자열 `"nan"`으로 변환돼 정상 거래가 전부 필터 아웃
+  - 수정: `normalize_text(v) is None` → `str(v).strip().upper() != "O"` (취소 계약은 `"O"` 명시 체크)
+- `etl/tests/test_fetch_rtms.py` — 회귀 테스트 추가
+
+### 추가
+- `til/2026-05-04-rtms-haeje-filter.md` — 원인·수정·교훈 기록
+
+---
+
 ## [2026-05-04] Phase 0 — 데이터 검증 및 설계 확정
 
 ### 결정 (ADR)
