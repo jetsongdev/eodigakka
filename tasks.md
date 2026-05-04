@@ -62,8 +62,10 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [~] `/api/affordable` 빈 결과 — bjd_code 불일치 해결 후 재검증 필요
 
 ### 프론트
-- [ ] Mapbox GL JS 세팅 (서울 zoom 11)
-- [ ] 동 폴리곤 색칠 (§6.4 색상 매핑)
+- [x] `GET /api/polygons` 작성 (`bjd_polygon` → GeoJSON FeatureCollection, 24h 캐시)
+- [ ] **사용자**: Mapbox 토큰 발급 (Individual tier) → `web/.env.local`에 `NEXT_PUBLIC_MAPBOX_TOKEN=pk....` 추가
+- [ ] Mapbox GL JS 세팅 (서울 zoom 11) + 폴리곤 source/layer
+- [ ] 동 폴리곤 색칠 (§6.4 색상 매핑, `/api/affordable` 결과를 polygon에 join)
 - [ ] 헤더 컨트롤 (모드 토글, 자금 슬라이더, 평형 멀티셀렉트)
 - [ ] 마우스오버 tooltip (동 이름 + median + tx_count)
 - [ ] 클릭 → 사이드패널 (Evidence 명시, TOP5 단지, 최근 10건)
