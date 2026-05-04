@@ -1,0 +1,120 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { sql } from 'kysely';
+
+import { db } from '../../../lib/db';
+import { evaluateAffordableDong, parseAffordableQuery } from '../../../lib/filter';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+interface AffordableRow {
+  bjd_code: string;
+  bjd_name: string;
+  size_bucket: 'S' | 'M' | 'L';
+  mode: 'TRADE' | 'JEONSE';
+  tx_count_3m: number;
+  unique_complex_3m: number;
+  median_man: number;
+  p25_man: number | null;
+  p75_man: number | null;
+  last_contract_date: string;
+  confidence: 'high' | 'low' | 'insufficient';
+  jeonse_ratio: number | null;
+  median_build_year: number | null;
+  build_year_stddev: number | null;
+}
+
+function toStatsMode(mode: 'trade' | 'jeonse') {
+  return mode === 'trade' ? 'TRADE' : 'JEONSE';
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const query = parseAffordableQuery(request.nextUrl.searchParams);
+    const statsMode = toStatsMode(query.mode);
+
+    const rows = await sql<AffordableRow>`
+      SELECT
+        s.bjd_code,
+        p.bjd_name,
+        s.size_bucket,
+        s.mode,
+        s.tx_count_3m,
+        s.unique_complex_3m,
+        CAST(s.median_man AS DOUBLE PRECISION) AS median_man,
+        CAST(s.p25_man AS DOUBLE PRECISION) AS p25_man,
+        CAST(s.p75_man AS DOUBLE PRECISION) AS p75_man,
+        s.last_contract_date::text AS last_contract_date,
+        s.confidence,
+        CAST(jr.ratio AS DOUBLE PRECISION) AS jeonse_ratio,
+        CAST(s.median_build_year AS DOUBLE PRECISION) AS median_build_year,
+        CAST(s.build_year_stddev AS DOUBLE PRECISION) AS build_year_stddev
+      FROM mv_dong_stats s
+      JOIN bjd_polygon p ON p.bjd_code = s.bjd_code
+      LEFT JOIN mv_jeonse_ratio jr
+        ON jr.bjd_code = s.bjd_code
+       AND jr.size_bucket = s.size_bucket
+      WHERE s.mode = ${statsMode}
+        ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
+      ORDER BY s.median_man ASC, s.tx_count_3m DESC
+    `.execute(db);
+
+    const dongs = rows.rows
+      .map((row) =>
+        evaluateAffordableDong(
+          {
+            bjdCode: row.bjd_code,
+            bjdName: row.bjd_name,
+            sizeBucket: row.size_bucket,
+            mode: row.mode,
+            txCount3m: Number(row.tx_count_3m),
+            uniqueComplex3m: Number(row.unique_complex_3m),
+            medianMan: Number(row.median_man),
+            p25Man: row.p25_man === null ? null : Number(row.p25_man),
+            p75Man: row.p75_man === null ? null : Number(row.p75_man),
+            lastContractDate: row.last_contract_date,
+            confidence: row.confidence,
+            jeonseRatio: row.jeonse_ratio === null ? null : Number(row.jeonse_ratio),
+            medianBuildYear:
+              row.median_build_year === null ? null : Math.round(Number(row.median_build_year)),
+            buildYearStddev:
+              row.build_year_stddev === null ? null : Number(row.build_year_stddev.toFixed(1)),
+          },
+          query,
+        ),
+      )
+      .filter((dong): dong is NonNullable<typeof dong> => dong !== null)
+      .map((dong) => ({
+        bjd_code: dong.bjdCode,
+        bjd_name: dong.bjdName,
+        median_man: Math.round(dong.medianMan),
+        tx_count_3m: dong.txCount3m,
+        unique_complex_3m: dong.uniqueComplex3m,
+        confidence: dong.confidence,
+        jeonse_ratio: dong.jeonseRatio,
+        color: dong.color,
+        evidence: dong.evidence,
+        median_build_year: dong.medianBuildYear,
+        build_year_stddev: dong.buildYearStddev,
+      }));
+
+    const freshness = await sql<{ max_contract_date: string | null }>`
+      SELECT MAX(contract_date)::text AS max_contract_date
+      FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
+    `.execute(db);
+
+    const maxContractDate = freshness.rows[0]?.max_contract_date ?? null;
+
+    return NextResponse.json({
+      dongs,
+      generated_at: new Date().toISOString(),
+      data_freshness: maxContractDate
+        ? `RTMS ${maxContractDate} 신고분까지`
+        : 'RTMS 신고분 없음',
+      evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: message, evidence: '입력 검증 또는 조회 실패' }, { status: 400 });
+  }
+}
