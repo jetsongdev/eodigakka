@@ -38,12 +38,14 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] `etl/fetch_rtms.py` 작성 (§9.1 기준, GANGBUK_14, kill switch 포함)
 - [x] `filter_cancelled` 버그 수정 — translate=True 시 NaN→"nan" 문제 (TIL)
 - [x] ETL 1회 수동 실행 → `tx_apt_trade` row count 확인 (trade 5,476건 / rent 3,977건)
-- [ ] **법정동 폴리곤 재적재** (ADR-008, TIL `bjd-code-haengjeong-vs-beopjeong`)
-  - [ ] NSDI에서 `LSMD_CONT_LDREG_11` (서울 법정동경계 shapefile) 다운로드
-  - [ ] `db/load_polygon.py`에 EPSG:5179→4326 변환 분기 추가
-  - [ ] `bjd_polygon` TRUNCATE 후 재적재
-  - [ ] `REFRESH MATERIALIZED VIEW mv_dong_stats / mv_jeonse_ratio`
-  - [ ] `/api/affordable` 재검증 (TRADE 모드 결과 > 0건)
+- [x] **법정동 폴리곤 재적재** (ADR-008, TIL `2026-05-04-bjd-code-…` + `2026-05-05-lsmd-shapefile-pitfalls`)
+  - [x] V-World에서 `LSMD_ADM_SECT_UMD_11` (서울 법정동 467개) 다운로드 — 처음에 `LSMD_CONT_LDREG`(필지) 잘못 받음
+  - [x] `db/load_polygon.py` 인코딩 자동 감지(`.cst` EUC-KR) + `EMD_CD` 8→10자리 패딩 추가
+  - [x] `bjd_polygon` TRUNCATE 후 467개 법정동 적재 완료
+  - [x] `tx_apt_rent` TRUNCATE 후 ETL 재실행 — 15,432건 법정동 코드로 재적재
+  - [x] `REFRESH MATERIALIZED VIEW mv_dong_stats / mv_jeonse_ratio` (TRADE 390/390, JEONSE 411/411 매칭)
+  - [x] SQL 검증 — 강북 14구 M형 4~8억 high confidence 동 정상 노출
+  - [ ] `/api/affordable` 라이브 재검증 (dev 서버 재기동 후)
 - [ ] cron 설정 (Mac M4 Pro, `0 3 * * *`)
 
 ### API

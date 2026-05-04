@@ -4,6 +4,32 @@
 
 ---
 
+## [2026-05-05] ADR-008 실행 — bjd_polygon 법정동 마이그레이션 완료
+
+### 결정
+- ADR-008(법정동 폴리곤 채택) 실행 단계 완료. SPEC 변경 없음.
+
+### 추가
+- `db/load_polygon.py` `detect_shapefile_encoding()` — `.cpg`/`.cst` 사이드카에서 인코딩 자동 추출 (V-World는 EUC-KR을 `.cst`에 둠)
+- `db/load_polygon.py` `pad_bjd_code_to_10()` — 8자리 `EMD_CD`(시도2+시군구3+읍면동3) → 10자리 법정동 코드 (끝에 "리" 자리 "00")
+- `docs/til/2026-05-05-lsmd-shapefile-pitfalls.md` — V-World LSMD 함정 3종 정리
+
+### 변경
+- `db/load_polygon.py` `load_file()`: 인코딩 자동 감지 + 패딩 함수 적용
+- `bjd_polygon` 데이터: HangJeongDong 행정동 427개 → LSMD UMD 법정동 467개 (TRUNCATE 후 재적재)
+- `tx_apt_rent`: TRUNCATE 후 ETL 재실행 → 행정동 코드(잘못된 fallback) 데이터 제거, 법정동 코드로 재적재 (15,432건)
+
+### 확인
+- 다운로드 파일 사이즈로 데이터셋 검증 (`LSMD_CONT_LDREG` 200MB 필지 단위 → 잘못, `LSMD_ADM_SECT_UMD` 2.4MB 동 단위 → 정답)
+- `mv_dong_stats × bjd_polygon` JOIN 100%: TRADE 390/390, JEONSE 411/411
+- SQL 검증: 강북 14구 M형 4~8억 high confidence 동 정상 노출 — 방학동(5.0억), 쌍문동(5.4억), 도봉동(5.95억) 등 Phase 0 bulk pull 결과와 일치
+
+### 다음 작업
+- API `/api/affordable` 라이브 재검증 (dev 서버 재기동 후)
+- cron 설정 (Mac M4 Pro, `0 3 * * *`)
+
+---
+
 ## [2026-05-04] Phase 1 ETL 검증 + API smoke + 도메인 함정 발견
 
 ### 결정 (ADR)

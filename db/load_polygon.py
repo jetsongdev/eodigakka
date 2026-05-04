@@ -80,9 +80,38 @@ def detect_bjd_name_column(gdf: gpd.GeoDataFrame) -> str:
     raise ValueError(f"법정동명 컬럼을 찾을 수 없음. 컬럼 목록: {gdf.columns.tolist()}")
 
 
+def detect_shapefile_encoding(path: str) -> str | None:
+    """같은 디렉토리의 .cpg/.cst 파일에서 인코딩 추출 (NSDI LSMD는 EUC-KR 흔함)."""
+    base = path.rsplit(".", 1)[0]
+    for ext in (".cpg", ".cst"):
+        sidecar = base + ext
+        if os.path.exists(sidecar):
+            try:
+                with open(sidecar, "r", encoding="ascii") as f:
+                    enc = f.read().strip()
+                    if enc:
+                        return enc
+            except (OSError, UnicodeError):
+                pass
+    return None
+
+
+def pad_bjd_code_to_10(value: object) -> str:
+    """8자리 EMD_CD(시도2+시군구3+읍면동3) → 10자리 법정동 코드(끝에 "리" 자리 "00")."""
+    s = str(value).strip()
+    if len(s) == 8:
+        return s + "00"
+    return s.zfill(10)
+
+
 def load_file(path: str, sido_filter: str) -> gpd.GeoDataFrame:
     print(f"파일 로드: {path}")
-    gdf = gpd.read_file(path)
+    encoding = detect_shapefile_encoding(path)
+    if encoding:
+        print(f"  사이드카 인코딩 감지: {encoding}")
+        gdf = gpd.read_file(path, encoding=encoding)
+    else:
+        gdf = gpd.read_file(path)
     print(f"  원본 CRS: {gdf.crs}, 행 수: {len(gdf)}")
 
     if gdf.crs and gdf.crs.to_epsg() != 4326:
@@ -96,7 +125,7 @@ def load_file(path: str, sido_filter: str) -> gpd.GeoDataFrame:
         gdf = gdf[gdf["sidonm"] == sido_filter].copy()
     else:
         bjd_col = detect_bjd_code_column(gdf)
-        gdf[bjd_col] = gdf[bjd_col].astype(str).str.zfill(10)
+        gdf[bjd_col] = gdf[bjd_col].astype(str).map(pad_bjd_code_to_10)
         gdf = gdf[gdf[bjd_col].str.startswith("11")].copy()
 
     print(f"  서울 필터 후: {len(gdf)}행")
@@ -154,7 +183,7 @@ def main() -> None:
     has_sggnm = "sggnm" in gdf.columns
     has_sidonm = "sidonm" in gdf.columns
     for _, row in gdf.iterrows():
-        bjd_code = str(row[bjd_col]).zfill(10)
+        bjd_code = pad_bjd_code_to_10(row[bjd_col])
         bjd_name = str(row[bjd_name_col]).strip()
         geom = to_multipolygon(row.geometry)
         if geom is None or geom.is_empty:

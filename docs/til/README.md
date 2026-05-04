@@ -6,6 +6,13 @@ eodigakka 프로젝트 진행하며 마주친 시행착오·해결 기록.
 
 ---
 
+## 2026-05-05 (Phase 1 — 법정동 마이그레이션)
+
+### DB
+- [V-World LSMD shapefile 함정 3종 (데이터셋 종류·EUC-KR·EMD_CD 8자리)](2026-05-05-lsmd-shapefile-pitfalls.md)
+
+---
+
 ## 2026-05-04 (Phase 0~1)
 
 ### MCP / API
