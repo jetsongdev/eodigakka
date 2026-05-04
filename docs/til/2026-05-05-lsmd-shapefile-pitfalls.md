@@ -2,6 +2,15 @@
 
 날짜: 2026-05-05
 
+## 다운로드 경로
+
+V-World → `데이터` → `다운로드` → 카테고리 `국토관리/지역개발 > 경계` → **`행정구역_읍면동(법정동)`** (`LSMD_ADM_SECT_UMD`).
+시도별 SHP zip이 18개 항목으로 분리 — `LSMD_ADM_SECT_UMD_서울.zip` (1.5 MB) 하나만 받으면 된다.
+
+![V-World LSMD_ADM_SECT_UMD 다운로드 화면](assets/2026-05-05-vworld-lsmd-umd-download.png)
+
+데이터셋 페이지: `vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30603` · 라이선스 CC BY-NC-ND · 갱신일 2026-04-15.
+
 ## 현상
 
 ADR-008(법정동 폴리곤 마이그레이션) 실행 단계에서 V-World 다운로드 → `load_polygon.py` 적재 → MV REFRESH로 갈 때 세 군데서 막혔다.
