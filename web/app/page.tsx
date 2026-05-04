@@ -95,7 +95,7 @@ const DEFAULT_QUERY: AffordableQueryState = {
 };
 
 const CASH_MIN = 0;        // 0억
-const CASH_MAX = 300000;   // 30억
+const CASH_MAX = 500000;   // 50억 (강북 14구 매매 p99 26억, max 156억 outlier 1건은 cover하지 않음)
 const CASH_STEP = 5000;    // 5천만원 단위
 
 function buildAffordableUrl(q: AffordableQueryState): string {
@@ -510,7 +510,10 @@ function CashRangeSlider({
       <div style={{ fontSize: 11, color: '#555', marginBottom: 6 }}>
         자금 범위: <strong>{manToEok(draft[0])} ~ {manToEok(draft[1])}</strong>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <CashEdgeButton ariaLabel="최소 -10억" edge="min" delta={-100000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ⏮
+        </CashEdgeButton>
         <CashEdgeButton ariaLabel="최소 -1억" edge="min" delta={-10000} draft={draft} setDraft={setDraft} onChange={onChange}>
           ⏪
         </CashEdgeButton>
@@ -584,6 +587,9 @@ function CashRangeSlider({
         </CashEdgeButton>
         <CashEdgeButton ariaLabel="최대 +1억" edge="max" delta={10000} draft={draft} setDraft={setDraft} onChange={onChange}>
           ⏩
+        </CashEdgeButton>
+        <CashEdgeButton ariaLabel="최대 +10억" edge="max" delta={100000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ⏭
         </CashEdgeButton>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999', marginTop: 2 }}>

@@ -75,6 +75,11 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - in-flight 요청 cancel (AbortController)
   - 또는 클라이언트 사이드 캐싱 (mode×size별 mv_dong_stats 한 번 다 받아두고 cash 필터만 client에서)
   - 후자가 네트워크 효율 압도적 (한 번 fetch → 클라 필터). API에 `/api/dong-stats?mode&size`(전체 동) 추가 검토
+- [ ] **슬라이더 / 카세트 버튼 햅틱 피드백** — 모바일 PWA에서 슬라이더 핸들 step 변경 시·카세트 버튼 클릭 시 진동
+  - Web Vibration API (`navigator.vibrate(10)`)는 Android Chrome만 지원, iOS Safari 차단 — 모바일 한정 / 미지원 환경 graceful degradation
+  - 단계: ±1천만 = 짧은 진동(8ms), ±1억 = 중간(15ms), ±10억 = 긴 진동(30ms)
+  - 슬라이더 onValueChange에서 step 단위로 trigger (드래그 중 매 step), 카세트 클릭 시 1회
+  - 사용자 환경설정 토글(localStorage `haptic=on/off`) 검토 (배터리·접근성)
 
 ### 검증
 - [x] 색칠지도 열고 "예상한 동이 초록인가" 눈으로 확인 (snapshot 02 — 도봉·노원·강북·중랑 등 짙은 녹색 분포 Phase 0 결과와 일치)
