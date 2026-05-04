@@ -49,9 +49,14 @@ def to_multipolygon(geom) -> MultiPolygon | None:
 
 def detect_bjd_code_column(gdf: gpd.GeoDataFrame) -> str:
     """법정동코드 컬럼명 자동 탐지 (shapefile마다 이름 다름)."""
-    # adm_cd2가 10자리 코드 (HangJeongDong 포맷)
-    candidates = ["adm_cd2", "BJD_CODE", "PNU", "LSMD_CONT", "BJDONG_CODE", "bjd_code",
-                  "ADM_CD", "CTPRVN_CD"]
+    # adm_cd2가 10자리 행정동 코드 (HangJeongDong 포맷)
+    # LDONG_CD / EMD_CD가 10자리 법정동 코드 (NSDI LSMD_CONT_LDREG 포맷)
+    candidates = [
+        "LDONG_CD", "EMD_CD", "BJD_CD",                        # NSDI LSMD 법정동
+        "adm_cd2",                                              # HangJeongDong 행정동
+        "BJD_CODE", "BJDONG_CODE", "bjd_code",                  # 일반
+        "PNU", "LSMD_CONT", "ADM_CD", "CTPRVN_CD",
+    ]
     for c in candidates:
         if c in gdf.columns:
             return c
@@ -64,7 +69,11 @@ def detect_bjd_code_column(gdf: gpd.GeoDataFrame) -> str:
 
 
 def detect_bjd_name_column(gdf: gpd.GeoDataFrame) -> str:
-    candidates = ["adm_nm", "BJD_NM", "EMD_NM", "bjd_name", "ADM_NM", "ENG_NM"]
+    candidates = [
+        "LDONG_NM", "EMD_NM", "BJD_NM",                         # NSDI LSMD 법정동명
+        "adm_nm",                                                # HangJeongDong
+        "bjd_name", "ADM_NM", "ENG_NM",
+    ]
     for c in candidates:
         if c in gdf.columns:
             return c
@@ -125,6 +134,11 @@ def main() -> None:
     parser.add_argument("file", help="GeoJSON 또는 Shapefile 경로")
     parser.add_argument("--sido", default=SIDO_DEFAULT)
     parser.add_argument("--dry-run", action="store_true", help="DB 적재 없이 파싱만")
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="적재 전 bjd_polygon TRUNCATE (행정동→법정동 같은 코드 체계 마이그레이션 시 필요)",
+    )
     args = parser.parse_args()
 
     gdf = load_file(args.file, args.sido)
@@ -169,6 +183,9 @@ def main() -> None:
     dsn = require_env("DATABASE_URL")
     with psycopg2.connect(dsn) as conn:
         with conn.cursor() as cur:
+            if args.truncate:
+                cur.execute("TRUNCATE bjd_polygon CASCADE")
+                print("bjd_polygon TRUNCATE 완료")
             execute_values(
                 cur,
                 """
