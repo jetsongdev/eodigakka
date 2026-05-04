@@ -389,7 +389,7 @@ with engine.begin() as conn:
 | Phase | 범위 | 기간 | 상태 |
 |---|---|---|---|
 | 0 | real-estate-mcp 검증 + 강북 14구 3개월 bulk pull + 동별 표본 희소 지도 확인. ADR-001~007 확정. (ADR-004) | 0.5일 | ✅ 2026-05-04 완료 |
-| 1 | 강북 14구 매매 + 전세 ETL → PostGIS, 색칠지도 1장 | 3일 | 🟡 진행 중 (ETL·DB·API ✓ / 색칠지도 ⏳ / cron ⏳) |
+| 1 | 강북 14구 매매 + 전세 ETL → PostGIS, 색칠지도 1장 | 3일 | 🟢 거의 완료 (ETL·DB·API ✓ / 색칠지도 6단계 ✓ / e2e 12/12 ✓ / 임장 1회 ⏳) |
 | 2 | 서울 25구 전세, 전세가율 가드, 사이드패널 | 2일 | 🔲 대기 |
 | 3 | (선택) 외곽 매매 추가, 정책대출 옵션 |  | 🔲 Phase 2 후 재평가 |
 | 4 | (선택) 자체 MCP tool: `find_affordable_dongs` |  | 🔲 Phase 2 후 재평가 |

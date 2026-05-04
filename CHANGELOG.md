@@ -4,6 +4,55 @@
 
 ---
 
+## [2026-05-05] Phase 1 프론트 완성 + e2e 12/12 + 정책 추가
+
+Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
+
+### 추가
+- **API**: `web/app/api/polygons/route.ts` — `bjd_polygon` 467개 동 GeoJSON FeatureCollection (24h 캐시), Mapbox source용
+- **Mapbox 색칠지도** (`web/app/page.tsx`):
+  - 서울 zoom 11 light 스타일 + `/api/polygons` source/layer (snapshot 01)
+  - `/api/affordable` 결과를 feature-state로 join, `evaluateAffordableDong` 색상 매핑 적용 (snapshot 02)
+  - 헤더 컨트롤: 매매·전세 토글 / cash 듀얼 슬라이더(`@radix-ui/react-slider`) + 카세트 6 버튼 + 평형 토글(snapshot 04)
+  - 마우스오버 tooltip + 클릭 사이드패널(TOP5 단지 + 최근 거래 10건 + 신구축 혼재 ⚠️) (snapshot 03)
+  - 전세 모드 색칠 — 79개 동 통과, 빨강(전세가율 80%+) 시각 노출 (snapshot 05)
+- **e2e 회귀**: `web/tests/e2e/{api,map}.spec.ts` 12개 (Codex 작성, 4.2초 green)
+  - api 5종(health/polygons/affordable trade·jeonse/invalid size 400)
+  - map 7종(헤더/폴리곤 카운트/매매↔전세 토글/cash ±1억·±10억 점프 + 0억 clamp/size 토글/canvas 존재)
+- **스냅샷 5장**: `docs/snapshots/01~05/` (각 데스크톱 1920×1080 + 모바일 390×844 + meta.md)
+- **til-flow 스킬**: `.claude/skills/til-flow/` — TIL+CHANGELOG+tasks+README 일괄 갱신 워크플로우 자동화
+- **snapshot 스킬 갱신**(글로벌): 데스크톱 1920×1080 표준, 한 폴더 여러 장 가이드, 브라우저 maximize 메모
+
+### 결정
+- **CLAUDE.md 도구 우선순위**: CLI > MCP (대체 가능 시). e2e/DB/외부 fetch는 CLI, 시각 캡처·자연어 탐색은 MCP.
+- **CLAUDE.md 반복 작업 → skill-creator**: 워크플로우 2회 반복 시 자동 스킬화 제안 (til-flow / snapshot이 그 결과물).
+
+### 추가 (의존성·도구)
+- `@radix-ui/react-slider` (cash 듀얼 핸들 슬라이더)
+- `@playwright/test` + chromium (e2e)
+- `mapbox-gl` + `@types/mapbox-gl`
+
+### 확인
+- 강북 14구 매매 가격 분포: p99 26억, max 156억(outlier 1건). cash 슬라이더 max는 50억으로 결정 (99%+ cover, 청사진 §3 비목표 강남4구 준수)
+- 매매 4~8억 M → 27개 동 통과, 전세 4~8억 M → 79개 동 통과 (Phase 0 bulk pull과 일치)
+
+### Phase 2 task 누적 (총 9건)
+1. 슬라이더 드래그 중 비동기 색칠 (debounce + AbortController)
+2. 슬라이더/카세트 햅틱 피드백 (Web Vibration API, Android 한정)
+3. 모바일 컨트롤·범례 분리 (시야 점유 60%+ 확보)
+4. 사이드패널 UI 개선 (분포 차트·매매전세 동시·액션 버튼·bottom sheet)
+5. 1인 가구 평형 세분화 (XS<33㎡ 또는 <40㎡)
+6. 신축/구축 build_year 필터
+7. 복도식/통로식 구분 (외부 데이터 K-apt OpenAPI)
+8. 서울 25구 전세 확장 (TARGET_GU=SEOUL_25)
+9. 정책대출 체크박스 (신생아·신혼·버팀목)
+
+### 다음 작업
+- 사용자: `cp etl/com.chsong.eodigakka-etl.plist ~/Library/LaunchAgents/ && launchctl load ...`로 일일 03:00 ETL 자동 실행 켜기
+- 사용자: 임장 1회 (청사진 9원리 Apply 게이트)
+
+---
+
 ## [2026-05-05] ADR-008 실행 — bjd_polygon 법정동 마이그레이션 완료
 
 ### 결정
