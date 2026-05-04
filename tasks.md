@@ -63,10 +63,10 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ### 프론트
 - [x] `GET /api/polygons` 작성 (`bjd_polygon` → GeoJSON FeatureCollection, 24h 캐시)
-- [ ] **사용자**: Mapbox 토큰 발급 (Individual tier) → `web/.env.local`에 `NEXT_PUBLIC_MAPBOX_TOKEN=pk....` 추가
-- [ ] Mapbox GL JS 세팅 (서울 zoom 11) + 폴리곤 source/layer
-- [ ] 동 폴리곤 색칠 (§6.4 색상 매핑, `/api/affordable` 결과를 polygon에 join)
-- [ ] 헤더 컨트롤 (모드 토글, 자금 슬라이더, 평형 멀티셀렉트)
+- [x] **사용자**: Mapbox 토큰 발급 (Individual tier) → `web/.env.local`에 `NEXT_PUBLIC_MAPBOX_TOKEN=pk....`
+- [x] Mapbox GL JS 세팅 (서울 zoom 11) + 폴리곤 source/layer (snapshot 01)
+- [x] 동 폴리곤 색칠 (§6.4 색상 매핑, `/api/affordable` 결과를 feature-state로 join, snapshot 02)
+- [x] 헤더 컨트롤 (모드 토글, 자금 셀렉터 cash_min/max, 평형 S/M/L/all 토글, 쿼리 변경 시 자동 재호출)
 - [ ] 마우스오버 tooltip (동 이름 + median + tx_count)
 - [ ] 클릭 → 사이드패널 (Evidence 명시, TOP5 단지, 최근 10건)
 
