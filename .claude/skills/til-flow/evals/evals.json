@@ -1,0 +1,44 @@
+{
+  "skill_name": "til-flow",
+  "evals": [
+    {
+      "id": 0,
+      "name": "etl-bug-fix-no-adr",
+      "prompt": "방금 ETL `etl/fetch_rtms.py`의 `filter_cancelled` 함수가 정상 거래를 전부 필터 아웃하던 버그를 고쳤다. 원인은 `api.get_data(translate=True)`가 `해제여부` 컬럼의 `NaN`을 문자열 `\"nan\"`으로 변환해서 기존 `normalize_text(v) is None` 체크가 모두 실패한 것. 수정은 `str(v).strip().upper() != \"O\"`로 변경해서 취소 계약(`\"O\"`)만 명시적으로 제외. 회귀 테스트 `etl/tests/test_fetch_rtms.py`도 추가했다. 이건 단순 버그 수정이라 SPEC ADR은 필요 없다. tasks.md의 `filter_cancelled 버그 수정` 항목과 `ETL 수동 실행 row count 확인` 항목 둘 다 [x]로 마무리. 정리해줘.",
+      "expected_output": "docs/til/2026-05-04-rtms-haeje-filter.md (4단락 양식), CHANGELOG.md 새 항목 (ADR 섹션 없음), tasks.md 두 항목 [x] 처리, docs/til/README.md ETL 카테고리 한 줄. SPEC.md 손대지 않음.",
+      "files": [],
+      "assertions": [
+        "새 TIL 파일이 docs/til/2026-05-04-*.md 형태로 생성됨",
+        "TIL 본문에 4개 헤더(현상/원인/수정/교훈) 모두 존재",
+        "CHANGELOG.md 새 항목에 '결정 (ADR)' 섹션 없음",
+        "tasks.md 두 항목 [x] 처리",
+        "SPEC.md ADR 섹션 변경 없음"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "domain-model-fix-with-adr",
+      "prompt": "`/api/affordable`가 빈 결과를 반환하는 원인을 찾았다. `mv_dong_stats(TRADE)`와 `bjd_polygon`의 JOIN이 0건이었는데, 매매 ETL은 RTMS의 `법정동시군구코드+법정동읍면동코드`로 법정동 코드(`1138010300`)를 만드는 반면 `bjd_polygon`은 HangJeongDong GeoJSON의 `adm_cd2`(`1138051000`, 행정동 코드)로 적재됐기 때문. 전세는 `법정동읍면동코드`가 없어서 동 이름 fallback으로 우연히 행정동 코드와 매칭됐지만 1법정동=다행정동 케이스(불광동→불광1동/2동)에서 데이터 손실 발생. NSDI `LSMD_CONT_LDREG_11`(서울 법정동경계 shapefile, EPSG:5179→4326 변환) 다운로드 후 `bjd_polygon` 재적재로 결정. 이건 도메인 모델 마이그레이션이라 ADR 추가 필요. tasks.md에 5단계 세부화(다운로드/변환분기/TRUNCATE/MV REFRESH/API 재검증)도 추가해줘.",
+      "expected_output": "docs/til/2026-05-04-bjd-code-* (4단락, 표 비교), CHANGELOG.md (결정 ADR + 수정 + 추가), tasks.md 새 5단계 블로커, docs/til/README.md DB 카테고리, SPEC.md §15 ADR-N 신설.",
+      "files": [],
+      "assertions": [
+        "새 TIL 파일에 4개 헤더 + 행정동/법정동 비교 표",
+        "CHANGELOG.md '결정 (ADR)' 섹션 포함",
+        "tasks.md 5+ 세부 단계 새 블로커",
+        "SPEC.md §15에 새 ADR (결정/근거/영향)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "trivial-typo-no-til",
+      "prompt": "`web/lib/db.ts`에서 `connectionString` 변수명에 오타가 있어서 `connectionStrng`로 적었던 거 방금 고쳤어. 한 글자 오타라 npm run dev 시 바로 에러 메시지로 잡혔고. 정리해줄래?",
+      "expected_output": "TIL 작성 안 함. 자명한 오타로 판단하고 사용자에게 생략 안내. 4문서 손대지 않음.",
+      "files": [],
+      "assertions": [
+        "TIL 파일 생성 안 됨",
+        "SPEC.md/CHANGELOG.md/README.md 손대지 않음",
+        "응답에 '단순 오타라 TIL 생략' 또는 동일 의미 안내"
+      ]
+    }
+  ]
+}

@@ -35,3 +35,14 @@ Thumbs.db
 # DB dump
 *.sql.gz
 *.dump
+
+# Skill 테스트 워크스페이스 (eval 스냅샷 + 벤치마크 결과)
+.claude/skills/*-workspace/
+
+# 외부 데이터 / vendored 라이브러리
+HangJeongDong_*.geojson
+real-estate-mcp/
+
+# 루트 package 산출물 (web/ 내부에서만 관리)
+/package-lock.json
+/node_modules/

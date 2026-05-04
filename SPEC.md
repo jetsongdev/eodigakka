@@ -523,6 +523,15 @@ jeonse-buyable-map/
 - **근거**: SPEC §4에 "1년 정체" 명시. 미검증 외부 레포에 Phase 0 전체를 의존하면 반나절이 디버깅으로 소실.
 - **영향**: §10 Phase 0 설명에 "(MCP 검증 우선, fallback: PDR CLI)" 추가.
 
+### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04)
+- **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 NSDI `LSMD_CONT_LDREG_11`(서울 법정동경계 shapefile, EPSG:5179→4326 변환) 기준으로 재적재.
+- **근거**: RTMS API는 법정동 코드만 제공(`법정동시군구코드+법정동읍면동코드` → `1138010300` 패턴). HangJeongDong은 행정동 코드(`adm_cd2 = 1138051000`)라 JOIN 0건. JEONSE는 동 이름 fallback이 우연히 행정동에 매핑되지만 1법정동=다행정동 케이스(예: 불광동→불광1동/2동)에서 데이터 손실·임의 매핑 발생. 부동산 도메인 표준은 법정동.
+- **영향**:
+  - `db/load_polygon.py`에 LSMD shapefile 분기 추가 (EPSG:5179→4326 변환).
+  - `bjd_polygon` 재적재 후 `mv_dong_stats` REFRESH 필요.
+  - ETL `apply_bjd_fallback`은 그대로 유지 — 법정동 코드끼리 매칭되므로.
+  - 기존 행정동 기반 GeoJSON은 `docs/til/2026-05-04-bjd-code-haengjeong-vs-beopjeong.md`에 비교 보존.
+
 ---
 
 ## 16. 한 줄 요약

@@ -4,16 +4,36 @@
 
 ---
 
-## [2026-05-04] ETL trade_rows_seen=0 버그 수정
+## [2026-05-04] Phase 1 ETL 검증 + API smoke + 도메인 함정 발견
+
+### 결정 (ADR)
+- ADR-008: bjd_polygon 행정동→법정동 코드 체계 마이그레이션 (LSMD 법정동경계 shapefile 채택)
 
 ### 수정
 - `etl/fetch_rtms.py` `filter_cancelled` — `해제여부` 필터 로직 수정
   - 원인: `translate=True` 시 NaN이 문자열 `"nan"`으로 변환돼 정상 거래가 전부 필터 아웃
   - 수정: `normalize_text(v) is None` → `str(v).strip().upper() != "O"` (취소 계약은 `"O"` 명시 체크)
-- `etl/tests/test_fetch_rtms.py` — 회귀 테스트 추가
+- `etl/fetch_rtms.py` `refresh_materialized_views` — 별도 autocommit 커넥션으로 분리 (`CONCURRENTLY`는 트랜잭션 밖에서만 실행 가능)
 
 ### 추가
-- `til/2026-05-04-rtms-haeje-filter.md` — 원인·수정·교훈 기록
+- `etl/tests/test_fetch_rtms.py` — 회귀 테스트 (`filter_cancelled` 정상 거래 보존)
+- `docs/til/` — Phase 0~1 시행착오 9개 + README 인덱스
+  - real-estate-mcp 403 / claude mcp add 문법 / Python 3.14 pyexpat / uv run 빌드 회피
+  - REFRESH MV autocommit / views.sql 적용 순서 / GeoJSON sido 필터 / 해제여부 역전 / 행정동 vs 법정동
+- `CLAUDE.md` — Claude Code 작업 규약 (`/init` 양식: 명령어·아키텍처·도메인 함정·TIL 강제 규칙)
+- `web/.env.local` — DATABASE_URL (gitignore)
+- `web/next-env.d.ts`, `web/tsconfig.json`, `web/package-lock.json` — Next.js 16 초기화
+
+### 확인 (실데이터)
+- ETL 1회 정상 실행: `trade_rows_seen=5476`, `rent_rows_seen=3977`
+- `/api/health`: `etl_last_succeeded_at`, raw count, MV 신선도 정상 응답
+- `/api/affordable?mode=trade&cash_min=40000&cash_max=80000&size=M`: `dongs:[]` ← 빈 결과
+  - 원인: `mv_dong_stats(TRADE)` × `bjd_polygon` JOIN 0건 (행정동/법정동 코드 불일치)
+  - JEONSE는 137건 매칭 (법정동읍면동코드 부재로 동 이름 fallback → 행정동 코드 → JOIN 성공)
+
+### 진행 중 블로커
+- bjd_polygon이 행정동(`adm_cd2 = 1138051000`) 기준이라 매매 ETL의 법정동(`1138010300`)과 매칭 불가
+- 해결안: LSMD_CONT_LDREG_11 (서울 법정동경계 shapefile, EPSG:5179→4326) 다운로드 + 재적재 (ADR-008)
 
 ---
 

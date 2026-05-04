@@ -36,15 +36,23 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 ### ETL
 - [x] `etl/pyproject.toml` 작성 (PublicDataReader, psycopg2-binary, python-dotenv)
 - [x] `etl/fetch_rtms.py` 작성 (§9.1 기준, GANGBUK_14, kill switch 포함)
-- [x] `filter_cancelled` 버그 수정 — translate=True 시 NaN→"nan" 문제 (TIL 2026-05-04)
+- [x] `filter_cancelled` 버그 수정 — translate=True 시 NaN→"nan" 문제 (TIL)
 - [x] ETL 1회 수동 실행 → `tx_apt_trade` row count 확인 (trade 5,476건 / rent 3,977건)
+- [ ] **법정동 폴리곤 재적재** (ADR-008, TIL `bjd-code-haengjeong-vs-beopjeong`)
+  - [ ] NSDI에서 `LSMD_CONT_LDREG_11` (서울 법정동경계 shapefile) 다운로드
+  - [ ] `db/load_polygon.py`에 EPSG:5179→4326 변환 분기 추가
+  - [ ] `bjd_polygon` TRUNCATE 후 재적재
+  - [ ] `REFRESH MATERIALIZED VIEW mv_dong_stats / mv_jeonse_ratio`
+  - [ ] `/api/affordable` 재검증 (TRADE 모드 결과 > 0건)
 - [ ] cron 설정 (Mac M4 Pro, `0 3 * * *`)
 
 ### API
-- [ ] `web/` Next.js 16 프로젝트 초기화 (Kysely 포함)
-- [ ] `GET /api/affordable` 구현 (§7 기준, confidence 컬럼 활용)
-- [ ] `GET /api/dong/:bjd/complexes` 구현
-- [ ] `GET /api/health` 구현 (kill switch 상태 노출)
+- [x] `web/` Next.js 16 프로젝트 초기화 (Kysely 포함, npm install 완료)
+- [x] `GET /api/affordable` 구현 (§7 기준, confidence 컬럼 활용)
+- [x] `GET /api/dong/:bjd/complexes` 구현
+- [x] `GET /api/health` 구현 (kill switch 상태 노출, smoke test 통과)
+- [x] `web/.env.local` DATABASE_URL 설정 + dev 서버(3002) 기동 확인
+- [~] `/api/affordable` 빈 결과 — bjd_code 불일치 해결 후 재검증 필요
 
 ### 프론트
 - [ ] Mapbox GL JS 세팅 (서울 zoom 11)
