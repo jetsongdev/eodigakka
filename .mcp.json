@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "real-estate": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Users/chsong/Documents/sidespace/projects/eodigakka/real-estate-mcp",
+        "python",
+        "src/real_estate/mcp_server/server.py"
+      ],
+      "env": {
+        "DATA_GO_KR_API_KEY": "${DATA_GO_KR_API_KEY}"
+      }
+    }
+  }
+}
