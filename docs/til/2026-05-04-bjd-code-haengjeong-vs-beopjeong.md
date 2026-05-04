@@ -24,7 +24,13 @@ bjd_code 체계가 둘이다:
 | 종류 | 예시 (은평구 녹번동) | 출처 |
 |---|---|---|
 | **법정동** 코드 | `1138010300` | RTMS 매매 API (`법정동시군구코드` + `법정동읍면동코드`) |
-| **행정동** 코드 | `1138051000` | HangJeongDong GeoJSON (`adm_cd2`) |
+| **행정동** 코드 | `1138051000` | HangJeongDong GeoJSON (`adm_cd2`) — `github.com/vuski/admdongkor` |
+
+`HangJeongDong_ver20260401.geojson` 출처 (Phase 0에서 사용한 행정동 파일):
+
+![vuski/admdongkor 저장소](assets/2026-05-04-vuski-admdongkor-source.png)
+
+`vuski/admdongkor` 는 분기별 `verYYYYMMDD/HangJeongDong_*.geojson`을 커밋해두는 행정동 경계 저장소. 우리가 받은 ver20260401는 `adm_cd2` 컬럼이 행정동 10자리(`1138051000` 같은 `5xxxx` 패턴) — RTMS의 법정동(`1138010300`, `1xxxx` 패턴)과 끝자리가 다르다.
 
 매매(trade) 데이터:
 - ETL의 `build_bjd_code_from_columns`가 RTMS의 `법정동시군구코드` + `법정동읍면동코드`를 그대로 합쳐서 **법정동 코드** 생성
