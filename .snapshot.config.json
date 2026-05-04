@@ -1,7 +1,7 @@
 {
   "rootDir": "docs/snapshots",
   "url": "http://localhost:3002",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": { "width": 1920, "height": 1080 },
   "extraViewports": [
     { "name": "mobile", "width": 390, "height": 844 }
   ],
