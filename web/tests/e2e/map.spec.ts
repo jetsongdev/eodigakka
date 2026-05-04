@@ -54,17 +54,26 @@ test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }
     .not.toBe(before);
 });
 
-test('cash 셀렉터 변경 시 evidence 텍스트가 갱신된다', async ({ page }) => {
+test('cash 카세트 — 좌측 버튼은 최소만, 우측 버튼은 최대만 변경된다', async ({ page }) => {
   await openMap(page);
 
   const evidence = page.getByText(/조건 일치 .* 모드 (TRADE|JEONSE), 현금 .*만원/);
   await expect(evidence).toBeVisible();
 
-  await page.locator('select').nth(0).selectOption('60000');
+  // 시작: 4억~8억. 최소 -1억 → 3억~8억
+  await page.getByRole('button', { name: '최소 -1억' }).click();
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('현금 60000~80000만원');
+    .toContain('현금 30000~80000만원');
+
+  // 최대 +1억 두 번 → 3억~10억
+  await page.getByRole('button', { name: '최대 +1억' }).click();
+  await page.getByRole('button', { name: '최대 +1억' }).click();
+
+  await expect
+    .poll(async () => (await evidence.textContent()) ?? '')
+    .toContain('현금 30000~100000만원');
 });
 
 test('size 토글 S 선택 시 evidence 텍스트가 유지되며 새 쿼리가 반영된다', async ({ page }) => {

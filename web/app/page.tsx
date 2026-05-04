@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
+import * as Slider from '@radix-ui/react-slider';
 
 import type { DongColor, QueryMode, SizeBucket } from '../lib/filter';
 
@@ -93,7 +94,9 @@ const DEFAULT_QUERY: AffordableQueryState = {
   size: 'M',
 };
 
-const CASH_STOPS = [20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000, 120000];
+const CASH_MIN = 0;        // 0억
+const CASH_MAX = 300000;   // 30억
+const CASH_STEP = 5000;    // 5천만원 단위
 
 function buildAffordableUrl(q: AffordableQueryState): string {
   const params = new URLSearchParams({
@@ -427,38 +430,12 @@ function ControlPanel({
       </div>
 
       {/* cash 슬라이더 */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: '#555', marginBottom: 4 }}>
-          자금 범위: <strong>{manToEok(query.cashMin)} ~ {manToEok(query.cashMax)}</strong>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <select
-            value={query.cashMin}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              onQueryChange({ ...query, cashMin: v, cashMax: Math.max(query.cashMax, v) });
-            }}
-            style={{ flex: 1, fontSize: 12, padding: 4 }}
-          >
-            {CASH_STOPS.map((s) => (
-              <option key={s} value={s}>{manToEok(s)}</option>
-            ))}
-          </select>
-          <span style={{ alignSelf: 'center', color: '#888' }}>~</span>
-          <select
-            value={query.cashMax}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              onQueryChange({ ...query, cashMax: v, cashMin: Math.min(query.cashMin, v) });
-            }}
-            style={{ flex: 1, fontSize: 12, padding: 4 }}
-          >
-            {CASH_STOPS.map((s) => (
-              <option key={s} value={s}>{manToEok(s)}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <CashRangeSlider
+        min={query.cashMin}
+        max={query.cashMax}
+        onChange={(min, max) => onQueryChange({ ...query, cashMin: min, cashMax: max })}
+      />
+
 
       {/* size 토글 */}
       <div style={{ marginBottom: 10 }}>
@@ -509,6 +486,164 @@ function ControlPanel({
 
       <Legend />
     </div>
+  );
+}
+
+function CashRangeSlider({
+  min,
+  max,
+  onChange,
+}: {
+  min: number;
+  max: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  // 슬라이더 드래그 중에는 onChange를 빈번히 부르지 않고 commit 시점에만 부른다.
+  const [draft, setDraft] = useState<[number, number]>([min, max]);
+  // 부모(query) 변경에 동기화
+  useEffect(() => {
+    setDraft([min, max]);
+  }, [min, max]);
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: '#555', marginBottom: 6 }}>
+        자금 범위: <strong>{manToEok(draft[0])} ~ {manToEok(draft[1])}</strong>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <CashEdgeButton ariaLabel="최소 -1억" edge="min" delta={-10000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ⏪
+        </CashEdgeButton>
+        <CashEdgeButton ariaLabel="최소 -1천만원" edge="min" delta={-1000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ◀
+        </CashEdgeButton>
+        <Slider.Root
+          className="cash-slider"
+          value={draft}
+          min={CASH_MIN}
+          max={CASH_MAX}
+          step={CASH_STEP}
+          minStepsBetweenThumbs={1}
+          onValueChange={(v) => setDraft([v[0], v[1]] as [number, number])}
+          onValueCommit={(v) => onChange(v[0], v[1])}
+          style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            userSelect: 'none',
+            touchAction: 'none',
+            flex: 1,
+            height: 22,
+          }}
+        >
+          <Slider.Track
+            style={{
+              backgroundColor: '#e2e2e2',
+              position: 'relative',
+              flexGrow: 1,
+              borderRadius: 9999,
+              height: 3,
+            }}
+          >
+            <Slider.Range
+              style={{
+                position: 'absolute',
+                backgroundColor: '#2d8a4f',
+                borderRadius: 9999,
+                height: '100%',
+              }}
+            />
+          </Slider.Track>
+          <Slider.Thumb
+            aria-label="자금 최소"
+            style={{
+              display: 'block',
+              width: 14,
+              height: 14,
+              backgroundColor: '#1a1a1a',
+              borderRadius: '50%',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+              cursor: 'pointer',
+            }}
+          />
+          <Slider.Thumb
+            aria-label="자금 최대"
+            style={{
+              display: 'block',
+              width: 14,
+              height: 14,
+              backgroundColor: '#1a1a1a',
+              borderRadius: '50%',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+              cursor: 'pointer',
+            }}
+          />
+        </Slider.Root>
+        <CashEdgeButton ariaLabel="최대 +1천만원" edge="max" delta={1000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ▶
+        </CashEdgeButton>
+        <CashEdgeButton ariaLabel="최대 +1억" edge="max" delta={10000} draft={draft} setDraft={setDraft} onChange={onChange}>
+          ⏩
+        </CashEdgeButton>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999', marginTop: 2 }}>
+        <span>{manToEok(CASH_MIN)}</span>
+        <span>{manToEok(CASH_MAX)}</span>
+      </div>
+    </div>
+  );
+}
+
+function CashEdgeButton({
+  ariaLabel,
+  edge,
+  delta,
+  draft,
+  setDraft,
+  onChange,
+  children,
+}: {
+  ariaLabel: string;
+  edge: 'min' | 'max';
+  delta: number;
+  draft: [number, number];
+  setDraft: (next: [number, number]) => void;
+  onChange: (min: number, max: number) => void;
+  children: React.ReactNode;
+}) {
+  // 한쪽 핸들만 이동. cashMin은 cashMax 이하로, cashMax는 cashMin 이상으로 clamp.
+  function shift() {
+    let nextMin = draft[0];
+    let nextMax = draft[1];
+    if (edge === 'min') {
+      nextMin = Math.min(draft[1], Math.max(CASH_MIN, draft[0] + delta));
+    } else {
+      nextMax = Math.max(draft[0], Math.min(CASH_MAX, draft[1] + delta));
+    }
+    const next: [number, number] = [nextMin, nextMax];
+    setDraft(next);
+    onChange(nextMin, nextMax);
+  }
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={shift}
+      style={{
+        fontSize: 14,
+        lineHeight: 1,
+        padding: '4px 6px',
+        minWidth: 24,
+        border: '1px solid #c4c4c4',
+        background: '#f7f7f7',
+        borderRadius: 3,
+        cursor: 'pointer',
+        color: '#222',
+        fontFamily: 'inherit',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

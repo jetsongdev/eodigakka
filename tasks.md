@@ -69,6 +69,12 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] 헤더 컨트롤 (모드 토글, 자금 셀렉터 cash_min/max, 평형 S/M/L/all 토글, 쿼리 변경 시 자동 재호출)
 - [x] 마우스오버 tooltip (동 이름 + 중위 + tx_count + confidence + 미통과 안내)
 - [x] 클릭 → 사이드패널 (Evidence + 모드별 TOP5 단지 + 최근 거래 10건 표 + 신구축 혼재 ⚠️)
+- [x] cash 슬라이더 (radix-slider) + 카세트 한 줄 컨트롤 + max 30억 확장 (snapshot 04)
+- [ ] **슬라이더 드래그 중 비동기 색칠** — 현재는 onValueCommit(드래그 종료)에서만 fetch. UX 개선:
+  - onValueChange(드래그 중)에 fetch debounce(150ms 정도) 적용
+  - in-flight 요청 cancel (AbortController)
+  - 또는 클라이언트 사이드 캐싱 (mode×size별 mv_dong_stats 한 번 다 받아두고 cash 필터만 client에서)
+  - 후자가 네트워크 효율 압도적 (한 번 fetch → 클라 필터). API에 `/api/dong-stats?mode&size`(전체 동) 추가 검토
 
 ### 검증
 - [x] 색칠지도 열고 "예상한 동이 초록인가" 눈으로 확인 (snapshot 02 — 도봉·노원·강북·중랑 등 짙은 녹색 분포 Phase 0 결과와 일치)
@@ -93,6 +99,17 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - [ ] `web/app/api/affordable/route.ts` size 파라미터 검증 갱신
   - [ ] `web/app/page.tsx` size 토글에 XS 버튼 추가 (`['XS','S','M','L','all']`)
   - [ ] 검증: 강북 14구 1인 가구용 신축 도시형생활주택(예: 신논현·왕십리 같은 곳에 있는 33㎡ 매물)이 XS 버킷에 매핑되는지 SQL 확인
+- [ ] **신축/구축 구분 필터** — 현재 mv_dong_stats에 `median_build_year` 있고 사이드패널에 "중위 N년식 + ⚠️신구축 혼재" 표시까지만. 헤더에 build_year 토글 추가:
+  - 신축 (2015+) / 준신축 (2005~2014) / 구축 (~2004) / 전체
+  - `/api/affordable`에 `build_year_min/max` 쿼리 추가, raw `tx_apt_trade.build_year`로 필터링한 동별 통계 재산출
+  - mv_dong_stats를 (bjd_code, size, mode, build_year_bucket)로 키 확장 검토 — MV 4배 부피
+  - 또는 동별 raw 필터링 후 즉석 집계 (성능 검토 필요)
+- [ ] **복도식/통로식 구분** — 한국 아파트 동 타입(중복도/계단식)이 매물 선호도에 큰 영향:
+  - RTMS 데이터엔 동 타입 컬럼 없음 → 외부 데이터 필요
+  - 후보 소스: K-apt(공동주택관리정보시스템 OpenAPI), 국토부 공동주택 정보, 또는 단지명+건축연도 휴리스틱(1990s 이전 = 대부분 복도식)
+  - 신규 테이블: `complex_meta(complex_name, bjd_code, dong_type, ...)`. 매칭은 단지명 정규화(공백·괄호·동수 제거) + bjd_code 조합
+  - UI: 사이드패널 단지 카드에 `중복도식`/`계단식` 라벨 + 헤더 토글
+  - Phase 2 이후 — RTMS만으로는 못 풀고 별도 ETL 필요
 - [ ] "Claude로 더 보기" 버튼 → real-estate-mcp 자연어 쿼리 복사
 
 ---
