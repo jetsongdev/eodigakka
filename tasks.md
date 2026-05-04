@@ -85,6 +85,13 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [ ] `mv_jeonse_ratio` 활성화 (ADR-002 컬럼명 기준)
 - [ ] 전세 모드 색칠 (빨강: 전세가율 80%+, ADR-003 레이블)
 - [ ] 정책대출 체크박스 (신생아·신혼·버팀목, §6.3)
+- [ ] **평형 size_bucket 세분화 — 1인 가구 케이스 분류** (현재 S=`<60㎡`가 너무 광범위, 18~33㎡ 도시형생활주택/소형 오피스텔과 33~60㎡ 신혼·1.5인 케이스 혼재)
+  - [ ] 신규 ADR: 평형 분류 기준 — `XS: <33㎡` (1인) / `S: 33~60` (1~1.5인) / `M: 60~85` / `L: 85+` 또는 부동산 관행에 맞춰 `XS: <40` / `S: 40~60` 검토
+  - [ ] `db/views.sql` `mv_dong_stats` size_bucket CASE 분기에 XS 추가 + REFRESH
+  - [ ] `web/lib/filter.ts` `SizeBucket` 타입 + `parseAffordableQuery` 검증에 XS 추가
+  - [ ] `web/app/api/affordable/route.ts` size 파라미터 검증 갱신
+  - [ ] `web/app/page.tsx` size 토글에 XS 버튼 추가 (`['XS','S','M','L','all']`)
+  - [ ] 검증: 강북 14구 1인 가구용 신축 도시형생활주택(예: 신논현·왕십리 같은 곳에 있는 33㎡ 매물)이 XS 버킷에 매핑되는지 SQL 확인
 - [ ] "Claude로 더 보기" 버튼 → real-estate-mcp 자연어 쿼리 복사
 
 ---
