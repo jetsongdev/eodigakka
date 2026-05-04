@@ -67,8 +67,8 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] Mapbox GL JS 세팅 (서울 zoom 11) + 폴리곤 source/layer (snapshot 01)
 - [x] 동 폴리곤 색칠 (§6.4 색상 매핑, `/api/affordable` 결과를 feature-state로 join, snapshot 02)
 - [x] 헤더 컨트롤 (모드 토글, 자금 셀렉터 cash_min/max, 평형 S/M/L/all 토글, 쿼리 변경 시 자동 재호출)
-- [ ] 마우스오버 tooltip (동 이름 + median + tx_count)
-- [ ] 클릭 → 사이드패널 (Evidence 명시, TOP5 단지, 최근 10건)
+- [x] 마우스오버 tooltip (동 이름 + 중위 + tx_count + confidence + 미통과 안내)
+- [x] 클릭 → 사이드패널 (Evidence + 모드별 TOP5 단지 + 최근 거래 10건 표 + 신구축 혼재 ⚠️)
 
 ### 검증
 - [ ] 색칠지도 열고 "예상한 동이 초록인가" 눈으로 확인

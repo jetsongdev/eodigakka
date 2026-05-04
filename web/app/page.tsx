@@ -42,6 +42,41 @@ interface AffordableResponse {
   evidence: string;
 }
 
+interface TopComplex {
+  complex_name: string;
+  median_man: number;
+  tx_count_3m: number;
+  evidence: string;
+}
+
+interface RecentTransaction {
+  mode: 'TRADE' | 'JEONSE';
+  complex_name: string;
+  area_m2: number;
+  amount_man: number;
+  monthly_man: number;
+  floor: number | null;
+  contract_date: string;
+  evidence: string;
+}
+
+interface DongDetailsResponse {
+  bjd_code: string;
+  bjd_name: string;
+  trade_top5: TopComplex[];
+  jeonse_top5: TopComplex[];
+  recent_transactions: RecentTransaction[];
+  generated_at: string;
+  evidence: string;
+}
+
+interface HoverInfo {
+  bjdCode: string;
+  bjdName: string;
+  x: number;
+  y: number;
+}
+
 type SizeOption = SizeBucket | 'all';
 
 interface AffordableQueryState {
@@ -82,6 +117,16 @@ export default function MapPage() {
   const [affordable, setAffordable] = useState<AffordableResponse | null>(null);
   const [query, setQuery] = useState<AffordableQueryState>(DEFAULT_QUERY);
   const [loading, setLoading] = useState(false);
+  const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
+  const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
+  const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
+
+  // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
+  const affordableMapRef = useRef<Map<string, AffordableDongResponse>>(new Map());
+  affordableMapRef.current = new Map(
+    (affordable?.dongs ?? []).map((d) => [d.bjd_code, d]),
+  );
 
   // 1) 지도 + 폴리곤 source/layer 1회 초기화
   useEffect(() => {
@@ -153,6 +198,34 @@ export default function MapPage() {
           },
         });
 
+        // hover: 커서 + tooltip
+        map.on('mousemove', POLYGONS_FILL_LAYER, (e) => {
+          if (!e.features?.length) return;
+          map.getCanvas().style.cursor = 'pointer';
+          const feat = e.features[0];
+          const props = feat.properties as { bjd_code?: string; bjd_name?: string } | null;
+          if (!props?.bjd_code) return;
+          setHover({
+            bjdCode: props.bjd_code,
+            bjdName: props.bjd_name ?? '',
+            x: e.point.x,
+            y: e.point.y,
+          });
+        });
+        map.on('mouseleave', POLYGONS_FILL_LAYER, () => {
+          map.getCanvas().style.cursor = '';
+          setHover(null);
+        });
+
+        // click: 사이드패널 열기
+        map.on('click', POLYGONS_FILL_LAYER, (e) => {
+          if (!e.features?.length) return;
+          const feat = e.features[0];
+          const props = feat.properties as { bjd_code?: string } | null;
+          if (!props?.bjd_code) return;
+          setSelectedBjd(props.bjd_code);
+        });
+
         setPolygonCount(fc.features?.length ?? 0);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -211,6 +284,33 @@ export default function MapPage() {
     };
   }, [query]);
 
+  // 3) selectedBjd 변경 시 동 상세 fetch
+  useEffect(() => {
+    if (!selectedBjd) {
+      setDongDetails(null);
+      return;
+    }
+    let cancelled = false;
+    setDongDetailsLoading(true);
+    fetch(`/api/dong/${selectedBjd}/complexes`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`/api/dong/${selectedBjd}/complexes HTTP ${res.status}`);
+        return res.json() as Promise<DongDetailsResponse>;
+      })
+      .then((data) => {
+        if (!cancelled) setDongDetails(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setDongDetailsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBjd]);
+
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
@@ -222,6 +322,24 @@ export default function MapPage() {
         polygonCount={polygonCount}
         loading={loading}
       />
+
+      {hover && (
+        <HoverTooltip
+          hover={hover}
+          dong={affordableMapRef.current.get(hover.bjdCode) ?? null}
+        />
+      )}
+
+      {selectedBjd && (
+        <SidePanel
+          bjdCode={selectedBjd}
+          dong={affordableMapRef.current.get(selectedBjd) ?? null}
+          details={dongDetails}
+          loading={dongDetailsLoading}
+          mode={query.mode}
+          onClose={() => setSelectedBjd(null)}
+        />
+      )}
 
       {error && (
         <div
@@ -391,6 +509,180 @@ function ControlPanel({
 
       <Legend />
     </div>
+  );
+}
+
+function HoverTooltip({
+  hover,
+  dong,
+}: {
+  hover: HoverInfo;
+  dong: AffordableDongResponse | null;
+}) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: hover.x + 14,
+        top: hover.y + 14,
+        padding: '6px 10px',
+        background: 'rgba(20,20,20,0.92)',
+        color: '#fff',
+        borderRadius: 4,
+        fontSize: 12,
+        pointerEvents: 'none',
+        zIndex: 3,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <div style={{ fontWeight: 600 }}>{hover.bjdName || hover.bjdCode}</div>
+      {dong ? (
+        <div style={{ marginTop: 2, color: '#ddd' }}>
+          중위 {(dong.median_man / 10000).toFixed(1)}억 · {dong.tx_count_3m}건 · {dong.confidence}
+        </div>
+      ) : (
+        <div style={{ marginTop: 2, color: '#999' }}>현재 필터로 미통과 / 표본 부족</div>
+      )}
+    </div>
+  );
+}
+
+function SidePanel({
+  bjdCode,
+  dong,
+  details,
+  loading,
+  mode,
+  onClose,
+}: {
+  bjdCode: string;
+  dong: AffordableDongResponse | null;
+  details: DongDetailsResponse | null;
+  loading: boolean;
+  mode: QueryMode;
+  onClose: () => void;
+}) {
+  const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
+  return (
+    <aside
+      style={{
+        position: 'absolute',
+        top: 12,
+        right: 60,
+        bottom: 12,
+        width: 360,
+        padding: '14px 16px',
+        background: 'rgba(255,255,255,0.97)',
+        borderRadius: 8,
+        boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+        zIndex: 2,
+        overflowY: 'auto',
+        fontSize: 13,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>
+            {details?.bjd_name ?? bjdCode}
+          </div>
+          <div style={{ fontSize: 11, color: '#888' }}>{bjdCode}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="닫기"
+          style={{
+            border: 'none',
+            background: 'transparent',
+            fontSize: 18,
+            cursor: 'pointer',
+            color: '#666',
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {dong && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '6px 8px',
+            background: '#f4f6f4',
+            borderLeft: '3px solid #2d8a4f',
+            fontSize: 12,
+          }}
+        >
+          {dong.evidence}
+          <div style={{ marginTop: 2, color: '#555' }}>
+            중위 {(dong.median_man / 10000).toFixed(1)}억 · {dong.confidence}
+            {dong.median_build_year && ` · 중위 ${dong.median_build_year}년식`}
+            {dong.build_year_stddev != null && dong.build_year_stddev > 10 && ' ⚠️ 신구축 혼재'}
+          </div>
+        </div>
+      )}
+
+      <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>
+        {mode === 'trade' ? '매매' : '전세'} TOP5 단지
+      </h4>
+      {loading && <div style={{ color: '#888' }}>로드 중...</div>}
+      {!loading && top5 && top5.length === 0 && (
+        <div style={{ color: '#888', fontSize: 12 }}>최근 3개월 거래 없음</div>
+      )}
+      {!loading && top5 && top5.length > 0 && (
+        <ol style={{ paddingLeft: 18, margin: 0 }}>
+          {top5.map((c) => (
+            <li key={c.complex_name} style={{ marginBottom: 4 }}>
+              <div style={{ fontWeight: 500 }}>{c.complex_name}</div>
+              <div style={{ fontSize: 11, color: '#666' }}>
+                중위 {(c.median_man / 10000).toFixed(1)}억 · {c.tx_count_3m}건
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>최근 거래 10건</h4>
+      {loading && <div style={{ color: '#888' }}>로드 중...</div>}
+      {!loading && details && details.recent_transactions.length === 0 && (
+        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+      )}
+      {!loading && details && details.recent_transactions.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>모드</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.recent_transactions.map((tx, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
+                <td style={{ padding: '4px 2px', color: tx.mode === 'TRADE' ? '#2d8a4f' : '#777' }}>
+                  {tx.mode === 'TRADE' ? '매' : '전'}
+                </td>
+                <td style={{ padding: '4px 2px' }}>
+                  {tx.complex_name}
+                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                </td>
+                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                  {(tx.amount_man / 10000).toFixed(1)}억
+                </td>
+                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {details && (
+        <div style={{ marginTop: 12, fontSize: 11, color: '#888' }}>
+          {details.evidence}
+        </div>
+      )}
+    </aside>
   );
 }
 
