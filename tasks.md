@@ -75,6 +75,12 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - in-flight 요청 cancel (AbortController)
   - 또는 클라이언트 사이드 캐싱 (mode×size별 mv_dong_stats 한 번 다 받아두고 cash 필터만 client에서)
   - 후자가 네트워크 효율 압도적 (한 번 fetch → 클라 필터). API에 `/api/dong-stats?mode&size`(전체 동) 추가 검토
+- [ ] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — snapshot 05 모바일 캡처에서 컨트롤 패널이 화면 절반 가까이 차지해 지도 시야 가림. 개선 옵션:
+  - (A) 모바일에서만 범례를 별도 시트(하단 풀러블 sheet 또는 floating chip)로 분리
+  - (B) 컨트롤 패널을 collapsible — 기본은 접힌 상태(요약 한 줄), 탭하면 펼침
+  - (C) 슬라이더+범례를 가로 스와이프 페이지(컨트롤 / 범례 2단)로
+  - 권장: B + A 조합 — 컨트롤은 collapsible 헤더, 범례는 우하단 floating chip(탭하면 팝업)
+  - 검증: 다음 mobile snapshot에서 지도 viewport 점유율 > 60% 확인
 - [ ] **슬라이더 / 카세트 버튼 햅틱 피드백** — 모바일 PWA에서 슬라이더 핸들 step 변경 시·카세트 버튼 클릭 시 진동
   - Web Vibration API (`navigator.vibrate(10)`)는 Android Chrome만 지원, iOS Safari 차단 — 모바일 한정 / 미지원 환경 graceful degradation
   - 단계: ±1천만 = 짧은 진동(8ms), ±1억 = 중간(15ms), ±10억 = 긴 진동(30ms)
