@@ -6,7 +6,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ---
 
-## Phase 0 — 데이터 검증 (완료)
+## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)
 
 - [x] RTMS API 키 발급·승인 (data.go.kr)
 - [x] real-estate-mcp 클론 + Claude Code MCP 연결 (`claude mcp add`)
@@ -14,8 +14,14 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] 강북구 2026-04 매매 92건 실데이터 확인
 - [x] 필터 룰 손 시뮬 (4~8억 61% 적중)
 - [x] 신구축 혼재 문제 발견 → SPEC ADR-006 반영
+- [x] 강북 14구 × 3개월 bulk pull → 동별 표본 희소 지도 확인
+  - confidence 분포: high 44% / low 31% / insufficient 25%
+  - M형 4~8억 high confidence 통과: 21개 동
+  - 거래 희소 구 확인: 종로(156건), 광진(210건), 용산(211건)
+  - 분산 가드 탈락 후보: 홍은동(IQR 1.61), 면목동(IQR 1.56)
 - [x] ADR-001~007 SPEC 반영
-- [x] CHANGELOG.md 초안 작성
+- [x] CHANGELOG.md / tasks.md / SPEC.md 최신화
+- [x] git init + GitHub private 레포 생성·푸시 (jetsongdev/eodigakka)
 
 ---
 
