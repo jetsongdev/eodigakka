@@ -218,6 +218,36 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 ---
 
+## 도구 우선순위
+
+### CLI > MCP (대체 가능한 경우)
+
+같은 작업이 CLI와 MCP 양쪽으로 가능하면 **CLI 우선**. 이유:
+- CLI는 재현 가능한 명령어 → 문서·스크립트·CI에 그대로 박을 수 있음
+- MCP는 세션 의존적이고 디버깅이 더 어려움 (원격 도구 호출 → 직렬화 → 응답)
+- 같은 Playwright API여도 `npx playwright test` 결과는 사용자가 본인 셸에서 그대로 재현 가능, MCP browser_evaluate은 그렇지 않음
+
+| 작업 | 우선 | 사용 |
+|---|---|---|
+| e2e 회귀 테스트 | **CLI** (`npx playwright test`) | 코드 변경 시마다, CI |
+| 스냅샷 시각 기록 | **MCP** (`mcp__plugin_playwright_playwright__*`) | 마일스톤마다, snapshot 스킬에서만 |
+| DB 쿼리 | **CLI** (`docker exec ... psql`) | 디버깅, 데이터 검증 |
+| 외부 데이터 fetch | **CLI** (`curl`/`wget`) | API 호출, 다운로드 |
+| 자연어 부동산 탐색 | **MCP** (`real-estate-mcp`) | CLI 대안 없음 |
+
+원칙: **MCP는 CLI 대안이 없을 때만**. 같은 작업이면 CLI로 통일.
+
+### 반복 작업 → skill-creator
+
+같은 워크플로우가 2회 이상 반복되면 즉시 `/skill-creator:skill-creator` 호출해서 스킬화 검토. 예시:
+- TIL + CHANGELOG + tasks 일괄 갱신 → `til-flow` 스킬로 분리됨 (2026-05-04)
+- 스냅샷 캡처 → `snapshot` 스킬 (글로벌)
+- 향후 후보: 모바일 UX 회귀 검증, 동 폴리곤 적재 절차 등
+
+판단: "이거 또 하네"라는 인지가 들면 그 자리에서 skill-creator로 스킬 드래프트 생성. 사용자가 매번 같은 지시 안 해도 자동 트리거.
+
+---
+
 ## 외부 위임 규약
 
 ### Codex (`/codex:rescue`)
