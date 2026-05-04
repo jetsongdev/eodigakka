@@ -50,8 +50,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - [x] `etl/run_etl.sh` 래퍼 작성 (.env 로드 + 로그 디렉토리 + venv python 직접 호출)
   - [x] `etl/com.chsong.eodigakka-etl.plist` 작성 (launchd, RunAtLoad=false)
   - [x] 스모크 테스트 통과 (`logs/etl-YYYYMMDD.log` exit 0)
-  - [ ] **사용자**: `cp etl/com.chsong.eodigakka-etl.plist ~/Library/LaunchAgents/` + `launchctl load ~/Library/LaunchAgents/com.chsong.eodigakka-etl.plist`
-  - [ ] 등록 확인: `launchctl list | grep eodigakka`
+  - [x] launchd 등록 완료 (2026-05-05) — `launchctl list | grep eodigakka` → `- 0 com.chsong.eodigakka-etl`, state=not running, program 경로 정상
 
 ### API
 - [x] `web/` Next.js 16 프로젝트 초기화 (Kysely 포함, npm install 완료)
