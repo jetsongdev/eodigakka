@@ -34,9 +34,19 @@ ETL_DISABLED=1 .venv-etl/bin/python3 etl/fetch_rtms.py    # 즉시 0 종료
 ⚠️ `cd etl && uv run python …`는 패키지 빌드 시도하다 실패 — venv `bin/python3` 직접 호출만 사용 (TIL `etl-pyproject-build`).
 
 ### 폴리곤 적재 (1회성)
+
+**현재(2026-05-05~) 운영**: V-World LSMD 법정동 SHP
+
 ```bash
-.venv-etl/bin/python3 db/load_polygon.py HangJeongDong_ver20260401.geojson --sido 서울특별시
+# 처음 적재 또는 코드 체계 마이그레이션
+.venv-etl/bin/python3 db/load_polygon.py "/path/to/LSMD_ADM_SECT_UMD_11_YYYYMM.shp" --sido 서울특별시 --truncate
 ```
+
+다운로드 경로: V-World → 데이터 → 다운로드 → `국토관리/지역개발 > 경계 > 행정구역_읍면동(법정동)` (`vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30603`). 시도별 SHP zip 분리, 서울만 1.5MB.
+
+⚠️ `LSMD_CONT_LDREG`(연속지적도, 200MB 필지 단위)와 헷갈리지 말 것 — TIL `2026-05-05-lsmd-shapefile-pitfalls`.
+
+**과거 (Phase 0~1 초기)**: HangJeongDong 행정동 GeoJSON 사용 — ADR-008로 폐기. 코드 호환은 유지(`load_polygon.py`가 양쪽 포맷 자동 감지).
 
 ### Web (Next.js)
 ```bash
@@ -117,14 +127,18 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 ### 법정동 vs 행정동 코드
 
-⚠️ **JOIN 실패 단골 원인**. 둘은 매핑 안 됨.
+⚠️ **JOIN 실패 단골 원인**. 둘은 매핑 안 됨. 부동산 도메인 표준은 **법정동**.
 
 | 종류 | 패턴 (은평구 녹번동 예시) | 출처 |
 |---|---|---|
-| 법정동 | `1138010300` (시군구5+법정5, `1xxxx`) | RTMS API |
-| 행정동 | `1138051000` (시군구5+행정5, `5xxxx`) | HangJeongDong GeoJSON `adm_cd2` |
+| 법정동 | `1138010300` (시군구5+법정5, `1xxxx` 패턴) | RTMS API, V-World LSMD UMD |
+| 행정동 | `1138051000` (시군구5+행정5, `5xxxx` 패턴) | HangJeongDong GeoJSON `adm_cd2` (Phase 0 사용분, 폐기) |
 
-현재 `bjd_polygon`은 **행정동** 기준. 매매 ETL이 `build_bjd_code_from_columns`로 법정동 코드 직접 생성 → `mv_dong_stats(TRADE)`가 `bjd_polygon`과 JOIN 실패. 해결 미정 (TIL `bjd-code-haengjeong-vs-beopjeong`).
+**현재 운영(2026-05-05~)**: `bjd_polygon`은 V-World `LSMD_ADM_SECT_UMD_11`(서울 법정동 467개) 기준 (ADR-008 실행 완료). `mv_dong_stats × bjd_polygon` JOIN: TRADE 390/390, JEONSE 411/411 (100% 매칭).
+
+함정 메모:
+- LSMD UMD `EMD_CD`는 8자리(시도2+시군구3+읍면동3) → 10자리로 패딩할 때 끝에 `00`("리" 자리), `zfill` 금지 (TIL `2026-05-05-lsmd-shapefile-pitfalls`).
+- V-World shapefile은 인코딩을 `.cst`(EUC-KR)에 둠 — `.cpg` 표준 아님. `load_polygon.py`가 자동 감지.
 
 ### 청사진 9원리 (위배 시 Stop)
 

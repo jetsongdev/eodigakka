@@ -389,7 +389,7 @@ with engine.begin() as conn:
 | Phase | 범위 | 기간 | 상태 |
 |---|---|---|---|
 | 0 | real-estate-mcp 검증 + 강북 14구 3개월 bulk pull + 동별 표본 희소 지도 확인. ADR-001~007 확정. (ADR-004) | 0.5일 | ✅ 2026-05-04 완료 |
-| 1 | 강북 14구 매매 + 전세 ETL → PostGIS, 색칠지도 1장 | 3일 | 🔲 대기 |
+| 1 | 강북 14구 매매 + 전세 ETL → PostGIS, 색칠지도 1장 | 3일 | 🟡 진행 중 (ETL·DB·API ✓ / 색칠지도 ⏳ / cron ⏳) |
 | 2 | 서울 25구 전세, 전세가율 가드, 사이드패널 | 2일 | 🔲 대기 |
 | 3 | (선택) 외곽 매매 추가, 정책대출 옵션 |  | 🔲 Phase 2 후 재평가 |
 | 4 | (선택) 자체 MCP tool: `find_affordable_dongs` |  | 🔲 Phase 2 후 재평가 |
@@ -523,14 +523,16 @@ jeonse-buyable-map/
 - **근거**: SPEC §4에 "1년 정체" 명시. 미검증 외부 레포에 Phase 0 전체를 의존하면 반나절이 디버깅으로 소실.
 - **영향**: §10 Phase 0 설명에 "(MCP 검증 우선, fallback: PDR CLI)" 추가.
 
-### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04)
-- **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 NSDI `LSMD_CONT_LDREG_11`(서울 법정동경계 shapefile, EPSG:5179→4326 변환) 기준으로 재적재.
+### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04 결정 / 2026-05-05 실행)
+- **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 V-World `LSMD_ADM_SECT_UMD_11`(서울 법정 읍면동 경계 SHP, EPSG:5186→4326 변환) 기준으로 재적재.
 - **근거**: RTMS API는 법정동 코드만 제공(`법정동시군구코드+법정동읍면동코드` → `1138010300` 패턴). HangJeongDong은 행정동 코드(`adm_cd2 = 1138051000`)라 JOIN 0건. JEONSE는 동 이름 fallback이 우연히 행정동에 매핑되지만 1법정동=다행정동 케이스(예: 불광동→불광1동/2동)에서 데이터 손실·임의 매핑 발생. 부동산 도메인 표준은 법정동.
-- **영향**:
-  - `db/load_polygon.py`에 LSMD shapefile 분기 추가 (EPSG:5179→4326 변환).
-  - `bjd_polygon` 재적재 후 `mv_dong_stats` REFRESH 필요.
-  - ETL `apply_bjd_fallback`은 그대로 유지 — 법정동 코드끼리 매칭되므로.
-  - 기존 행정동 기반 GeoJSON은 `docs/til/2026-05-04-bjd-code-haengjeong-vs-beopjeong.md`에 비교 보존.
+- **데이터셋 정정**: 결정 시점에 `LSMD_CONT_LDREG_11`(연속지적도, 200MB 필지 단위, 동 이름 컬럼 없음)을 가정했으나 실행 단계에서 `LSMD_ADM_SECT_UMD_11`(법정 읍면동 경계, 2.4MB, 467행)로 정정. 좌표계도 EPSG:5179가 아닌 **EPSG:5186**.
+- **영향 (실행 결과 2026-05-05)**:
+  - `db/load_polygon.py` 보강: `detect_shapefile_encoding` (`.cpg`/`.cst` 사이드카에서 EUC-KR 등 자동 추출), `pad_bjd_code_to_10` (8자리 `EMD_CD`→10자리 끝 `00`).
+  - `bjd_polygon` TRUNCATE 후 467개 법정동 적재. `tx_apt_rent`도 TRUNCATE 후 ETL 재실행(15,432건)으로 행정동 fallback 데이터 제거.
+  - MV REFRESH 결과 `mv_dong_stats × bjd_polygon` JOIN 매칭률 100% (TRADE 390/390, JEONSE 411/411).
+  - SQL 검증: 강북 14구 M형 4~8억 high confidence 동 정상 노출 (방학동 5.0억, 쌍문동 5.4억 등 Phase 0 결과와 일치).
+  - 시행착오 기록: `docs/til/2026-05-05-lsmd-shapefile-pitfalls.md`.
 
 ---
 
