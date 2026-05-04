@@ -26,7 +26,22 @@
 
 ### 다음 작업
 - API `/api/affordable` 라이브 재검증 (dev 서버 재기동 후)
-- cron 설정 (Mac M4 Pro, `0 3 * * *`)
+
+---
+
+## [2026-05-05] ETL 자동화 래퍼 + launchd plist
+
+### 추가
+- `etl/run_etl.sh` — `.env` 로드 + `logs/etl-YYYYMMDD.log` 출력 + venv python 직접 호출. cron/launchd 양쪽 호환. `set -euo pipefail`로 중간 실패 캐치.
+- `etl/com.chsong.eodigakka-etl.plist` — launchd 매일 03:00 실행 schedule. `RunAtLoad=false` (load 시점에 즉시 실행 막음).
+- `.gitignore`에 `logs/` 추가.
+
+### 확인
+- 래퍼 스모크 테스트: 38초, exit 0, `trade_rows_seen=5476 / rent_rows_seen=15432` 정상 적재.
+
+### 다음 작업
+- 사용자가 `cp ... ~/LaunchAgents/` + `launchctl load ...`로 plist 등록.
+- Mapbox 색칠지도 (Phase 1 마지막 산출물).
 
 ---
 
