@@ -75,6 +75,18 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - in-flight 요청 cancel (AbortController)
   - 또는 클라이언트 사이드 캐싱 (mode×size별 mv_dong_stats 한 번 다 받아두고 cash 필터만 client에서)
   - 후자가 네트워크 효율 압도적 (한 번 fetch → 클라 필터). API에 `/api/dong-stats?mode&size`(전체 동) 추가 검토
+- [ ] **사이드패널 UI 개선** — 동 폴리곤 클릭 시 뜨는 패널의 정보 위계·시각화 강화 (snapshot 03 baseline)
+  - **시각 위계**: 중위 가격을 가장 큰 숫자로 노출, Evidence는 보조 텍스트. confidence·연식 칩 형태(태그)로 분리
+  - **분포 차트**: 동 내 거래가 분포 (히스토그램 또는 박스플롯) — p25/p50/p75 한눈에. svg 직접 또는 `recharts`/`visx` 검토
+  - **평형 분포**: area_m2 히스토그램 (이 동에 어떤 평형이 많은지)
+  - **매매·전세 동시 비교**: 한 동에서 매매·전세 mini-card 두 개 (전세가율 % 강조)
+  - **단지 카드 강화**: TOP5 단지에 미니 sparkline(최근 1년 거래 추이) + 평형/연식 라벨
+  - **액션 버튼**: 
+    - "Claude로 더 보기" — real-estate-mcp 자연어 쿼리 클립보드 복사 (`내가 살펴본 [동이름] 평형 [size] 매물 자세히 알려줘`)
+    - "RTMS에서 보기" — data.go.kr 외부 링크
+    - "임장 후보 ⭐" — localStorage에 저장 (즐겨찾기, 후속 임장 List 기능)
+  - **모바일 UX**: 우측 360px 고정 → bottom sheet (drawer) 패턴, 헤더 swipe-down으로 닫기
+  - **권장 우선순위**: 분포 차트 → 매매·전세 동시 비교 → 액션 버튼 → 모바일 sheet → 평형 분포
 - [ ] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — snapshot 05 모바일 캡처에서 컨트롤 패널이 화면 절반 가까이 차지해 지도 시야 가림. 개선 옵션:
   - (A) 모바일에서만 범례를 별도 시트(하단 풀러블 sheet 또는 floating chip)로 분리
   - (B) 컨트롤 패널을 collapsible — 기본은 접힌 상태(요약 한 줄), 탭하면 펼침
