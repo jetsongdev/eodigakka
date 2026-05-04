@@ -9,7 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@types/mapbox-gl": "^3.4.1",
     "kysely": "^0.27.0",
+    "mapbox-gl": "^3.23.1",
     "next": "^16.0.0",
     "pg": "^8.11.0",
     "react": "^19.0.0",

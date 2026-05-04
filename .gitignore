@@ -47,3 +47,6 @@ real-estate-mcp/
 # 루트 package 산출물 (web/ 내부에서만 관리)
 /package-lock.json
 /node_modules/
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
