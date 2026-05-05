@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - Healthchecks.io ping + run_etl.sh 폐기
+## [v0.5.5] - 2026-05-05 - Healthchecks.io ping + run_etl.sh 폐기
 
 GHA cron이 미발사·실패하는 경우 자가 인지가 늦어 데이터 1~2일 비는 사고 위험을 막기 위해 `etl.yml`에 healthchecks.io 3-step ping(start / success / fail) 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 — 값이 없으면 ping 안 보내고 워크플로 계속 진행, 등록 후 다음 firing부터 즉시 효력. 새벽 03:00 KST에 안 돌면 healthchecks.io에서 이메일/Telegram 알림.
 
