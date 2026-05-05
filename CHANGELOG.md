@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - Mapbox 토큰 환경별 분리 + client-token-rotation 스킬 + ADR-009
+## [v0.5.3] - 2026-05-05 - Mapbox 토큰 환경별 분리 + client-token-rotation 스킬 + ADR-009
 
 `NEXT_PUBLIC_MAPBOX_TOKEN`을 production / preview 환경별로 분리. Mapbox URL restriction이 wildcard 미지원이라 단일 토큰으론 hash 기반 Vercel preview URL을 보호할 수 없는 구조. 신규 토큰 `eodigakka-prod`(restriction `https://eodigakka.vercel.app`만)을 Production env에, 기존 default token(unrestricted)을 Preview env + 로컬 `.env.local`에 분리. Production redeploy(캐시 해제) 후 지도 작동 검증.
 
