@@ -178,7 +178,15 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - [ ] **평형 분포**: area_m2 히스토그램
   - [ ] **단지 카드 강화**: TOP5에 미니 sparkline + 평형/연식 라벨
   - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
-  - [ ] **모바일 UX**: bottom sheet (drawer) 패턴, swipe-down 닫기
+  - [ ] **최근 거래 매·전 분리 표시**: 현재 한 표에 `recent_transactions` 10건 섞여서 노출 (`mode === 'TRADE' ? '매' : '전'` 라벨 컬럼). 매매 최근 10건 / 전세 최근 10건 각각 두 섹션으로 분리
+    - `/api/dong/[bjd]/complexes` 응답 스키마 변경: `recent_transactions: TxRow[]` → `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` (기존 단일 배열 polyfill 유지 검토)
+    - SidePanel 렌더: 두 섹션 헤더 (`매매 최근 10건` / `전세 최근 10건`), 모드 라벨 컬럼 제거 가능
+    - 마이그레이션: API 응답 호환성 — 한 번에 둘 다 보내고 클라에서 split도 가능 (DB 한 번 쿼리, ORDER BY mode, contract_date DESC LIMIT)
+  - [ ] **최근 거래 더보기**: 10건 이후 페이지네이션. 시트 안에서 "더보기" 버튼 → 다음 10건 append. cursor는 `(contract_date, id)` 또는 `OFFSET` 기반
+    - API: `/api/dong/[bjd]/complexes?txCursor=<base64>&txMode=trade|jeonse` 또는 `?txOffset=10`
+    - 모바일 시트 안에서 자연스러운 무한 스크롤도 옵션 — 다만 시트 내부 스크롤 + 더보기 명시 클릭이 더 명확
+    - 트리거: 매·전 분리 task 완료 후
+  - [ ] **모바일 UX 잔여**: swipe-down 닫기 제스처 (bottom sheet 1차 — `useIsNarrow` 분기·백드롭·드래그 핸들 visual은 2026-05-05 완료)
 - [~] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — 컨트롤 collapsible만 1차 처리 완료 (2026-05-05)
   - [x] (B) 컨트롤 패널 collapsible — 기본 접힘 + 1줄 요약 + 토글, 사용자 토글 후 자동 동기화 stop. 모바일 뷰에서 지도 점유율 90% 이상 확보
   - [ ] (A) 범례 floating chip — 별도 시트 분리는 후속
