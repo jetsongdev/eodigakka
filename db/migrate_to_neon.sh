@@ -32,7 +32,9 @@ if [ -z "${NEON_URL:-}" ]; then
 fi
 
 echo "===== 1) 로컬 docker postgres dump ====="
-# pg_dump v16은 --exclude-extension 미지원(v17부터). 후처리로 EXTENSION 관련 statement 제거.
+# pg_dump v16은 --exclude-extension 미지원(v17부터). EXTENSION 자체는 grep 후처리로 제거.
+# tiger/topology 같은 PostGIS 부속 schema는 --exclude-schema로 정공법 제외 (grep -v는 COPY
+# 데이터 row를 잘못 매칭해 stream 깨졌음, TIL 2026-05-05-neon-migration-tcc-launchd 참조).
 docker exec "$LOCAL_CONTAINER" pg_dump \
   -U "$LOCAL_USER" \
   -d "$LOCAL_DB" \
@@ -40,16 +42,19 @@ docker exec "$LOCAL_CONTAINER" pg_dump \
   --no-privileges \
   --clean \
   --if-exists \
+  --exclude-schema=tiger \
+  --exclude-schema=tiger_data \
+  --exclude-schema=topology \
   | grep -vE '^(DROP|CREATE|COMMENT ON) EXTENSION' \
-  | grep -vE '\btiger\.|tiger_geocoder|topology\.' \
   > "$DUMP_FILE"
 
 echo "  dump size: $(wc -c < "$DUMP_FILE") bytes"
 
 echo "===== 2) Neon PostGIS 활성화 점검 ====="
-docker run --rm "$PSQL_IMAGE" psql "$NEON_URL" -c "SELECT PostGIS_Version();" || {
-  echo "ERROR: Neon에서 PostGIS extension 미활성." >&2
-  echo "Neon SQL Editor에서 먼저: CREATE EXTENSION IF NOT EXISTS postgis;" >&2
+# pooler 모드에선 search_path가 다른 backend로 분배될 수 있어 fully-qualified 호출.
+docker run --rm "$PSQL_IMAGE" psql "$NEON_URL" -c "SELECT public.postgis_version();" || {
+  echo "ERROR: Neon에서 PostGIS extension 미활성 또는 public schema에 없음." >&2
+  echo "Neon SQL Editor에서: CREATE EXTENSION IF NOT EXISTS postgis;" >&2
   exit 1
 }
 
@@ -57,12 +62,13 @@ echo "===== 3) Neon에 import ====="
 docker run --rm -i "$PSQL_IMAGE" psql "$NEON_URL" -v ON_ERROR_STOP=1 < "$DUMP_FILE"
 
 echo "===== 4) 검증 ====="
+# pooler는 statement별 backend 분배 가능 — search_path 의존 금지, fully-qualified 호출.
 docker run --rm "$PSQL_IMAGE" psql "$NEON_URL" -c "
   SELECT
-    (SELECT COUNT(*) FROM bjd_polygon)  AS bjd,
-    (SELECT COUNT(*) FROM tx_apt_trade) AS trade,
-    (SELECT COUNT(*) FROM tx_apt_rent)  AS rent,
-    (SELECT COUNT(*) FROM mv_dong_stats) AS mv_stats;
+    (SELECT COUNT(*) FROM public.bjd_polygon)   AS bjd,
+    (SELECT COUNT(*) FROM public.tx_apt_trade)  AS trade,
+    (SELECT COUNT(*) FROM public.tx_apt_rent)   AS rent,
+    (SELECT COUNT(*) FROM public.mv_dong_stats) AS mv_stats;
 "
 
 echo "===== 5) dump 파일 정리 ====="

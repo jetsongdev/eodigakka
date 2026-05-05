@@ -4,6 +4,18 @@
 
 ---
 
+## [2026-05-05] Neon 마이그레이션 적재 통과 (issue #1 후반부)
+
+`bash db/migrate_to_neon.sh` 끝까지 green — bjd 467 / trade 5,456 / rent 14,744 / mv_stats 801, MV refresh 2건 + 인덱스 5건 재생성. GHA Secrets 등록·workflow_dispatch·launchd 정리는 issue #1로 이어진다.
+
+### 수정
+- `db/migrate_to_neon.sh` 검증 query를 fully-qualified로 (`public.bjd_polygon` 등). 함정 3(pooler search_path)을 PostGIS 점검에만 적용하고 검증 step에 빠뜨려 import 전부 성공한 뒤 마지막 SELECT만 `relation does not exist` 발생.
+
+### 추가
+- TIL `docs/til/2026-05-05-neon-migration-tcc-launchd.md` 함정 5(fix 적용 누락) 섹션 + 적재 결과 표 추가, 진행 상태를 "적재 완료, GHA 후속"으로 갱신.
+
+---
+
 ## [2026-05-05] Phase 1 프론트 완성 + e2e 12/12 + 정책 추가
 
 Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
