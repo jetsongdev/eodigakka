@@ -4,6 +4,26 @@
 
 ---
 
+## [2026-05-05] GHA cron 안정화 + launchd 잔재 정리 (issue #1 close)
+
+`workflow_dispatch` 첫 trigger 통과 후 직전 두 run의 `InvalidSchemaName` 분석 — Neon pooler가 transaction-mode 분배 시 일부 backend의 `search_path`에 `public` 누락. 영구 fix는 client-side startup option 1줄.
+
+### 수정
+- `etl/fetch_rtms.py` `psycopg2.connect`에 `options="-c search_path=public"` 추가 (main 함수와 `refresh_materialized_views` 두 군데). startup option은 매 backend connect 시 server에 전달돼 transaction pooler 분배와 무관하게 결정적으로 적용 — `ALTER ROLE`보다 surgical.
+- `.github/workflows/etl.yml` post-summary `psycopg2.connect`도 동일 패턴.
+
+### 변경
+- `com.chsong.eodigakka-etl.plist` repo에서 삭제 (history는 d611364에 보존). LaunchAgents 사본은 fallback용 유지.
+- `tasks.md` cron 항목을 launchd → GHA cron 운영으로 갱신.
+
+### 추가
+- TIL `docs/til/2026-05-05-neon-migration-tcc-launchd.md` 함정 6(`InvalidSchemaName`) + startup option fix 기록, 제목·교훈 갱신(5중 → 6중).
+
+### 결정
+- search_path 같은 GUC는 client-side `psycopg2.connect(options="-c key=value")`로 박는 게 server-side `ALTER ROLE`보다 surgical (blast radius 작음). 다른 client(web Next.js 등)에 영향 안 감.
+
+---
+
 ## [2026-05-05] Neon 마이그레이션 적재 통과 (issue #1 후반부)
 
 `bash db/migrate_to_neon.sh` 끝까지 green — bjd 467 / trade 5,456 / rent 14,744 / mv_stats 801, MV refresh 2건 + 인덱스 5건 재생성. GHA Secrets 등록·workflow_dispatch·launchd 정리는 issue #1로 이어진다.

@@ -52,7 +52,8 @@ jobs:
         run: |
           .venv-etl/bin/python3 - <<'EOF'
           import os, psycopg2
-          conn = psycopg2.connect(os.environ['DATABASE_URL'])
+          # options=-c search_path=public: Neon pooler backend 분산 대응
+          conn = psycopg2.connect(os.environ['DATABASE_URL'], options="-c search_path=public")
           with conn.cursor() as cur:
               cur.execute("""
                 SELECT

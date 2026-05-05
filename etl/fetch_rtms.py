@@ -326,7 +326,8 @@ def insert_rent_rows(conn: psycopg2.extensions.connection, rows: list[tuple[Any,
 
 def refresh_materialized_views(dsn: str) -> None:
     # CONCURRENTLY는 트랜잭션 밖(autocommit)에서만 실행 가능 → 별도 커넥션 사용
-    with psycopg2.connect(dsn) as conn:
+    # options=-c search_path=public: Neon pooler에서 backend별 search_path 분산 방지 (TIL 함정 5/6)
+    with psycopg2.connect(dsn, options="-c search_path=public") as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dong_stats")
@@ -341,7 +342,7 @@ def main() -> int:
     api = TransactionPrice(require_env("RTMS_KEY"))
     months = month_tokens(date.today(), count=3)
 
-    with psycopg2.connect(db_config.dsn) as conn:
+    with psycopg2.connect(db_config.dsn, options="-c search_path=public") as conn:
         ensure_etl_status_table(conn)
         update_etl_status(conn, started=True)
         lookup = load_bjd_lookup(conn)
