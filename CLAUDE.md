@@ -231,12 +231,17 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
    + release 가치 있으면 CHANGELOG.md 최상단에 `## [Unreleased] - 제목` 섹션 추가 (날짜는 워크플로가 KST merge일로 채움)
    + 없으면 워크플로 skip → 버전 bump 안 일어남 (의도된 opt-in 패턴)
 3. git push -u origin <branch>              # → Vercel 자동 Preview deploy
-   → Telegram 🚀 Preview 토픽 알림 + URL 도착
-4. Preview URL에서 동작 검증                # 브라우저 또는 curl
-5. gh pr create                             # 자가 review, title은 Conventional Commit (feat:/fix:/chore:/...)
-6. gh pr merge --squash --delete-branch     # → main 자동 Production deploy
-   → version-bump 워크플로 자동 발사: package.json bump + CHANGELOG [Unreleased]→[vX.Y.Z] + git tag
-   → Vercel 재빌드 (bump commit) → Telegram 🎯 Production 토픽 알림 (PR 1건당 2회 deploy 발생)
+   → version-bump 워크플로 prebump job 발사: PR title로 bump 결정 → PR head에
+     `chore(release): vX.Y.Z (PR #N)` commit force-push (package.json bump +
+     CHANGELOG [Unreleased]→[vX.Y.Z] + KST 날짜). 이미 chore(release) commit이
+     있으면 reset 후 재계산(멱등). [Unreleased] 없는 PR은 prebump skip.
+   → Telegram 🚀 Preview 토픽 알림 + URL 도착 (bump이 반영된 상태로 빌드됨)
+4. Preview URL에서 동작 검증                # 브라우저 또는 curl. 푸터 버전 vX.Y.Z 노출 확인
+5. gh pr create / 또는 step 3 직후 이미 만들어졌으면 review만
+6. gh pr merge --squash --delete-branch     # → main에 1 commit (모든 변경 + bump 통합)
+   → Vercel rebuild → Telegram 🎯 Production 토픽 알림 1회 (해당 [vX.Y.Z] 섹션 본문 표시)
+   → version-bump 워크플로 finalize job이 main의 package.json version 읽고 tag만 push
+     (Vercel rebuild 추가 트리거 안 됨 — tag는 deployment_status 발사 안 함)
 ```
 
 ### 버전 bump 규칙 (PR title 기반, 자동)
@@ -270,7 +275,9 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 ### Telegram 알림 검증
 
-각 push 후 1분 내 Telegram 토픽 알림 도착해야 정상. 안 오면 `gh run list --workflow=telegram-deploy-notify.yml`로 워크플로 상태 확인. 정상 흐름은 PR merge 시 🎯 Production 알림이 **2회** 도착(merge commit + bump commit) — 노이즈 아님.
+각 push 후 1분 내 Telegram 토픽 알림 도착해야 정상. 안 오면 `gh run list --workflow=telegram-deploy-notify.yml`로 워크플로 상태 확인. 정상 흐름:
+- **Preview**: PR push당 🚀 Preview 알림 1회 (bump이 미리 PR head에 통합된 상태로)
+- **Production**: PR merge당 🎯 Production 알림 1회 (해당 [vX.Y.Z] 섹션 본문 포함). finalize job의 tag push는 deployment_status 발사 안 해서 알림 발생 안 함.
 
 ---
 
