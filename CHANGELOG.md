@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
+## [v0.5.5] - 2026-05-05 - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
 
 기존 흐름은 PR merge 후 별도 bump commit이 main에 추가 push되어 Vercel rebuild가 두 번 발생하고 Telegram 🎯 Production 알림도 2회 도착. 이번 변경으로 **bump이 PR head에 prebump 시점에 force-push로 미리 통합**되어 main에 squash 1 commit으로 들어가게 됨 → Vercel rebuild 1회·알림 1회·푸터 버전 즉시 갱신·CHANGELOG 본문 정확 모두 만족.
 
@@ -22,6 +22,11 @@
 ### 결정
 - **prebump force-push 패턴**: `--force-with-lease`로 사용자 commit 손실 방지. GITHUB_TOKEN으로 push (PAT 사용 시 워크플로 자기 트리거 가능 → 무한 loop 회피). PR title 변경(edited 트리거) 시에도 reset + 재계산으로 멱등성 보장.
 - **finalize job 분리**: tag만 push이라 Vercel deployment_status 트리거 안 됨 → 추가 알림 발생 안 함. main의 push event는 squash merge로 이미 발생한 1회만.
+- **bump version은 main 기반으로 계산** (Codex P1): PR head의 package.json이 아니라 origin/main의 현재 version에서 bump → 두 release PR 동시 진행 시 같은 next version precompute 회귀 방지.
+- **finalize는 merge_commit_sha checkout + fetch-tags** (Codex P1·P2): main HEAD가 아닌 PR의 머지 commit에 explicit SHA로 tag → 다른 PR이 그 사이 머지되어도 우리 PR의 commit에 정확히 tag 붙음. fetch-tags로 원격 tag 인식해 rerun 시에도 깔끔히 skip.
+
+### 추가 (이번 PR self-test)
+- 이 PR이 self-test 불가능(main의 옛 워크플로가 prebump 트리거 안 함)이라 bump을 PR 본문에 직접 포함시킴 — `web/package.json` v0.5.4 → v0.5.5, CHANGELOG `[Unreleased]` → `[v0.5.5]`. 머지 후 새 워크플로의 finalize가 main 머지 commit에 tag v0.5.5 push. 다음 PR부터 prebump 자동 동작.
 
 ---
 

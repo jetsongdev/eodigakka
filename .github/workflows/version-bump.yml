@@ -100,7 +100,7 @@ jobs:
           fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 기존 chore(release): commit이 있으면 reset (재계산 위해)
+      - name: "기존 chore(release) commit이 있으면 reset (재계산 위해)"
         run: |
           set -euo pipefail
           LAST_MSG=$(git log -1 --format=%s)
@@ -147,16 +147,24 @@ jobs:
           echo "type=patch" >> "$GITHUB_OUTPUT"
           echo "::warning::PR title이 Conventional Commit 형식 미일치 — patch fallback. title=$PR_TITLE"
 
-      - name: web/package.json bump
+      - name: "web/package.json bump (main 기반 — 동시 PR 충돌 회피)"
         id: version
         if: steps.gate.outputs.has_unreleased == 'true'
         working-directory: web
+        env:
+          BUMP_TYPE: ${{ steps.bump.outputs.type }}
         run: |
           set -euo pipefail
-          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          # PR head의 package.json이 아니라 main의 현재 version에서 bump.
+          # 동시에 열린 두 PR이 같은 next version을 precompute해 충돌하는 회귀 방지.
+          # (Codex P1: Recompute versions from main, not from the PR head)
+          git fetch origin main --depth=1
+          MAIN_VER=$(git show origin/main:web/package.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+          npm pkg set version="$MAIN_VER"
+          npm version "$BUMP_TYPE" --no-git-tag-version
           NEW=$(node -p "require('./package.json').version")
           echo "new_version=$NEW" >> "$GITHUB_OUTPUT"
-          echo "::notice::package.json → v$NEW"
+          echo "::notice::main v$MAIN_VER → v$NEW (bump=$BUMP_TYPE)"
 
       - name: CHANGELOG [Unreleased] → [vX.Y.Z] + KST 날짜 갱신
         if: steps.gate.outputs.has_unreleased == 'true'
@@ -191,7 +199,7 @@ jobs:
           print(f"replaced [Unreleased] → [v{version}] - {today}")
           PY
 
-      - name: chore(release): commit + force-push to PR head
+      - name: "chore(release) commit + force-push to PR head"
         if: steps.gate.outputs.has_unreleased == 'true'
         env:
           NEW_VERSION: ${{ steps.version.outputs.new_version }}
@@ -219,12 +227,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
+      # main HEAD가 아니라 PR 머지 commit을 직접 checkout — 다른 PR이 그 사이 머지되어도
+      # 우리 PR의 commit에 정확히 tag가 붙도록.
+      # (Codex P1: Tag the merged PR commit instead of the moving main head)
+      # fetch-tags: true로 원격 tag도 가져와 존재 검사가 정확히 작동.
+      # (Codex P2: Fetch tags before checking whether v$V already exists)
+      - name: "Checkout merged commit (main HEAD 아님 — race 회피) + fetch tags"
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           token: ${{ secrets.RELEASE_PAT }}
           fetch-depth: 1
+          fetch-tags: true
 
       - name: package.json version 읽기
         id: ver
@@ -233,19 +247,22 @@ jobs:
           set -euo pipefail
           V=$(node -p "require('./package.json').version")
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "::notice::main의 web/package.json version: v$V"
+          echo "::notice::merge commit의 web/package.json version: v$V"
 
       - name: tag vX.Y.Z 만들기 + push (이미 있으면 skip)
         env:
           V: ${{ steps.ver.outputs.version }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           set -euo pipefail
-          if git rev-parse "v$V" >/dev/null 2>&1; then
-            echo "::notice::tag v$V 이미 존재 — skip"
+          # 원격 tag도 fetch됐으니 rev-parse가 정확함
+          if git rev-parse "refs/tags/v$V" >/dev/null 2>&1; then
+            echo "::notice::tag v$V 이미 존재 (원격 포함) — skip"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "v$V"
+          # explicit SHA로 tag — race 발생해도 우리 머지 commit에 정확히 붙음
+          git tag "v$V" "$MERGE_SHA"
           git push origin "v$V"
-          echo "::notice::pushed tag v$V"
+          echo "::notice::pushed tag v$V → $MERGE_SHA"
