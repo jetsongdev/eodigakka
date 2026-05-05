@@ -16,8 +16,12 @@ GHA cron이 미발사·실패하는 경우 자가 인지가 늦어 데이터 1~2
 
 부수 정리로 `etl/run_etl.sh` 삭제 — launchd 폐기 + GHA가 inline 명령으로 대체한 뒤로 live consumer 없음. CHANGELOG·blog·TIL의 historical 언급은 의도적으로 유지.
 
+### 결정
+- ADR-010: 외부 watchdog로 healthchecks.io 무료 tier 도입. GHA 자체 모니터링은 scheduler 미발사 케이스를 못 잡아 sufficient하지 않다는 판단. 향후 `/api/health` HTTP check 등 같은 패턴으로 확장 가능.
+
 ### 추가
 - `.github/workflows/etl.yml` — healthchecks.io start/success/fail ping 3-step. env hoist로 secret 안전 주입(GHA shell injection 방지 패턴 재사용).
+- `SPEC.md` ADR-010 — 결정 근거·trade-off·영향 기록.
 
 ### 변경
 - `tasks.md` — Healthchecks.io ping + run_etl.sh 폐기 항목 [x] 처리, 우선순위 추천 갱신.
