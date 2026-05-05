@@ -38,6 +38,40 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [ ] `db/migrate_to_neon.sh` — 1회성 스크립트지만 Neon 재마이그레이션 시 재사용 가능. README에 "초기화 절차" 섹션으로 보존 명시
 - [ ] CLAUDE.md 표 갱신 — local docker postgres 명령어가 여전히 유효한지 (web dev에는 OK, ETL은 Neon 직결로 전환)
 
+### E. Vercel 배포 셋업 (2026-05-05 진행 중)
+
+`jetsongdev/eodigakka` Vercel 프로젝트 생성 + GitHub 레포 연결 + telegram-deploy-notify 워크플로 활성화 완료. 첫 production deploy 전 잔여 작업.
+
+- [x] Vercel 프로젝트 생성 + `vercel link` (web/.vercel/project.json 생성)
+- [x] GitHub repo 연결 (`vercel git connect`)
+- [x] `next.config.js` — NEXT_PUBLIC_APP_VERSION + NEXT_PUBLIC_GIT_SHA 빌드 타임 inject
+- [x] Telegram 워크플로 + 3종 토픽 라우팅 검증 (smoke test 3건 통과)
+- [x] Root Directory를 `web`으로 변경 (Vercel dashboard → Settings → Build and Deployment, 2026-05-05)
+- [x] 환경변수 Production + Preview 등록 완료 (2026-05-05): `DATABASE_URL`, `NEXT_PUBLIC_MAPBOX_TOKEN`
+- [ ] (선택) Development 환경에도 추가 — `vercel dev` / `vercel env pull` 사용 시 필요. 현재 로컬은 `web/.env.local` 직접 관리라 비필수
+- [ ] **Mapbox 토큰 도메인 화이트리스트** (즉시 — 보안) — `https://account.mapbox.com/access-tokens/` 해당 토큰 → URL restrictions:
+  - `http://localhost:*`
+  - `https://eodigakka.vercel.app`
+  - `https://*.vercel.app` (preview 빌드용)
+  - `https://*-jetsongdev.vercel.app` (직접 URL 패턴)
+- [x] 첫 production deploy 완료 (2026-05-05, sha 20353d3, 24s build) — `https://eodigakka.vercel.app`
+- [x] 자동화 라인 검증 완료 — Push → Vercel build → GitHub Deployments → GHA workflow (run 25368302505, 21s) → Telegram 🎯 Production 토픽
+- [x] API 검증 — `/api/health` (trade 5748·rent 15295), `/api/polygons` (467개), `/api/affordable` (26개 동, freshness RTMS 2026-05-04)
+- [ ] 브라우저에서 페이지 동작 검증:
+  - 지도 폴리곤 색칠
+  - 슬라이더 +/- 칩 표시
+  - 사이드패널 분포 차트
+  - 모바일 collapsed/펼치기
+  - 푸터 면책 + 출처 + 버전(`v0.1.0 #20353d3`)
+- [ ] (선택) 커스텀 도메인 연결 — Vercel dashboard → Domains → Add. SSL 자동.
+- [ ] (선택) Vercel Analytics / Speed Insights — Next.js 16 + Turbopack 빌드에 분석 추가
+
+### F. 보안·운영 (Vercel 셋업 후 즉시)
+
+- [ ] `gh secret set DATABASE_URL` 등 GitHub 시크릿이 ETL workflow에서 쓰는 것과 Vercel 환경변수 일관성 점검 (값이 동일한지 — Neon 비번 회전 시 두 곳 다 갱신 필요)
+- [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
+- [ ] 면책 고지 + 데이터 출처가 SEO/소셜 카드에도 노출되도록 `app/layout.tsx`의 `<meta>` 점검
+
 ---
 
 ## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)

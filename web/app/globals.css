@@ -18,3 +18,7 @@ html, body {
 #__next, body > div:first-child {
   height: 100%;
 }
+
+@keyframes eodigakka-spin {
+  to { transform: rotate(360deg); }
+}

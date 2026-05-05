@@ -430,6 +430,13 @@ export default function MapPage() {
           cashDelta={cashDelta}
         />
 
+        {(polygonCount === null || affordable === null) && !error && (
+          <LoadingOverlay
+            polygonCount={polygonCount}
+            affordableReady={affordable !== null}
+          />
+        )}
+
         {hover && (
           <HoverTooltip
             hover={hover}
@@ -837,6 +844,63 @@ function CashRangeSlider({
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999', marginTop: 2 }}>
         <span>{formatMan(CASH_MIN)}</span>
         <span>{formatMan(CASH_MAX)}</span>
+      </div>
+    </div>
+  );
+}
+
+function LoadingOverlay({
+  polygonCount,
+  affordableReady,
+}: {
+  polygonCount: number | null;
+  affordableReady: boolean;
+}) {
+  // 단계 표시 — 폴리곤 → 거래 데이터 순서로 진행. 어떤 단계에서 막혔는지 사용자가 알 수 있게.
+  const stage = polygonCount === null
+    ? '서울 467개 법정동 경계 로드 중...'
+    : !affordableReady
+      ? '동별 거래 데이터 분석 중...'
+      : '준비 완료';
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(255, 255, 255, 0.78)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 5,
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{ textAlign: 'center' }}>
+        <div
+          aria-hidden
+          style={{
+            width: 36,
+            height: 36,
+            margin: '0 auto',
+            border: '3px solid rgba(45, 138, 79, 0.18)',
+            borderTopColor: '#2d8a4f',
+            borderRadius: '50%',
+            animation: 'eodigakka-spin 0.9s linear infinite',
+          }}
+        />
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#2d8a4f', marginTop: 14 }}>
+          지도 준비 중
+        </div>
+        <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{stage}</div>
+        <div style={{ fontSize: 10, color: '#999', marginTop: 6 }}>
+          {polygonCount === null ? '경계 0/467' : `경계 ${polygonCount}/467`}
+          {' · '}
+          {affordableReady ? '거래 데이터 ✓' : '거래 데이터 …'}
+        </div>
       </div>
     </div>
   );
