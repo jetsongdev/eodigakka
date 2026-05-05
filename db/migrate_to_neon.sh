@@ -22,6 +22,7 @@ if [ -z "${NEON_URL:-}" ]; then
 fi
 
 echo "===== 1) 로컬 docker postgres dump ====="
+# pg_dump v16은 --exclude-extension 미지원(v17부터). 후처리로 EXTENSION 관련 statement 제거.
 docker exec "$LOCAL_CONTAINER" pg_dump \
   -U "$LOCAL_USER" \
   -d "$LOCAL_DB" \
@@ -29,11 +30,7 @@ docker exec "$LOCAL_CONTAINER" pg_dump \
   --no-privileges \
   --clean \
   --if-exists \
-  --exclude-extension=postgis \
-  --exclude-extension=postgis_topology \
-  --exclude-extension=postgis_tiger_geocoder \
-  --exclude-extension=fuzzystrmatch \
-  --exclude-extension=plpgsql \
+  | grep -vE '^(DROP|CREATE|COMMENT ON) EXTENSION' \
   > "$DUMP_FILE"
 
 echo "  dump size: $(wc -c < "$DUMP_FILE") bytes"
