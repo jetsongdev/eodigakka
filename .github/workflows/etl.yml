@@ -18,6 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Healthchecks.io start ping
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
+        run: |
+          if [ -n "${HEALTHCHECKS_PING_URL}" ]; then
+            curl -fsS -m 10 --retry 3 "${HEALTHCHECKS_PING_URL}/start" || true
+          else
+            echo "HEALTHCHECKS_PING_URL not set, skipping start ping"
+          fi
+
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -64,3 +74,25 @@ jobs:
               row = cur.fetchone()
               print(f"trade_count={row[0]}, rent_count={row[1]}, last_ok={row[2]}, mv_refreshed={row[3]}")
           EOF
+
+      - name: Healthchecks.io success ping
+        if: success()
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
+        run: |
+          if [ -n "${HEALTHCHECKS_PING_URL}" ]; then
+            curl -fsS -m 10 --retry 3 "${HEALTHCHECKS_PING_URL}" || true
+          else
+            echo "HEALTHCHECKS_PING_URL not set, skipping success ping"
+          fi
+
+      - name: Healthchecks.io fail ping
+        if: failure()
+        env:
+          HEALTHCHECKS_PING_URL: ${{ secrets.HEALTHCHECKS_PING_URL }}
+        run: |
+          if [ -n "${HEALTHCHECKS_PING_URL}" ]; then
+            curl -fsS -m 10 --retry 3 "${HEALTHCHECKS_PING_URL}/fail" || true
+          else
+            echo "HEALTHCHECKS_PING_URL not set, skipping fail ping"
+          fi

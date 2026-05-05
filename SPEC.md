@@ -528,6 +528,14 @@ jeonse-buyable-map/
 - **근거**: Mapbox URL restriction은 정확한 origin 매칭만 허용하고 wildcard·port wildcard·subdomain 패턴 모두 거부한다. Vercel preview URL은 push마다 hash가 바뀌어 사전 등록 불가. 단일 토큰으론 production + preview를 동시에 보호할 수 없어 환경별 분리 외 대안이 없다. trade-off: preview·local은 노출 표면이 작고(PR-only URL, 로컬은 외부 비노출) abuse 시 production 사용량에 영향 없으므로 unrestricted 수용 가능.
 - **영향**: §11 보안·운영 섹션에 "client-side token rotation 절차" 추가 필요. 현재 `NEXT_PUBLIC_MAPBOX_TOKEN` 1건 적용 완료. 향후 Sentry DSN, Analytics token 등 동일 패턴 후보. Vercel `Settings → Environment Variables`에서 같은 key를 환경별로 다른 value 등록하는 패턴이 표준. TIL `2026-05-05-mapbox-token-url-restriction`.
 
+### ADR-010: Healthchecks.io 외부 watchdog 도입 (2026-05-05)
+- **결정**: GHA cron(`RTMS ETL (daily)`)에 healthchecks.io 무료 tier ping 3-step(start / success / fail)을 박는다. `HEALTHCHECKS_PING_URL` GitHub secret으로 주입하며, secret 미등록 환경에선 graceful skip(echo 후 정상 진행).
+- **근거**: ETL 자가 감지 한계 — `etl_job_status.last_succeeded_at`이 1~2일 비어도 외부 알림 없으면 사용자가 사이트 들어가기 전까지 인지 안 됨. GHA scheduler 자체가 부하로 미발사할 수도 있어 GHA 내부 모니터링은 sufficient하지 않다. 외부 watchdog가 schedule + grace time(1h) 기준으로 독립 판정 → 이메일/Telegram 알림. 무료 tier(20개 check)면 충분.
+- **trade-off**: ping URL 누출 시 외부에서 임의로 success/fail 가짜 ping 가능 → 단, healthchecks는 전송된 timestamp만 신뢰하므로 가짜 success는 진짜 실패를 가릴 위험 있음. UUID 추측 어려워 실질 위험 낮음. 회전 비용 낮음(secret 갱신만).
+- **영향**:
+  - `.github/workflows/etl.yml` start/success/fail 3-step 추가 (env hoist로 GHA shell injection 방어 — `gha-shell-injection.md` TIL).
+  - 향후 `/api/health` 외부 ping(HTTP check), 다른 cron(Vercel deployment 모니터링 등)도 같은 패턴으로 확장 가능.
+
 ### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04 결정 / 2026-05-05 실행)
 - **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 V-World `LSMD_ADM_SECT_UMD_11`(서울 법정 읍면동 경계 SHP, EPSG:5186→4326 변환) 기준으로 재적재.
 - **근거**: RTMS API는 법정동 코드만 제공(`법정동시군구코드+법정동읍면동코드` → `1138010300` 패턴). HangJeongDong은 행정동 코드(`adm_cd2 = 1138051000`)라 JOIN 0건. JEONSE는 동 이름 fallback이 우연히 행정동에 매핑되지만 1법정동=다행정동 케이스(예: 불광동→불광1동/2동)에서 데이터 손실·임의 매핑 발생. 부동산 도메인 표준은 법정동.

@@ -10,25 +10,47 @@
 
 ---
 
-## [v0.5.5] - 2026-05-05 - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
+## [v0.5.6] - 2026-05-05 - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
 
 기존 흐름은 PR merge 후 별도 bump commit이 main에 추가 push되어 Vercel rebuild가 두 번 발생하고 Telegram 🎯 Production 알림도 2회 도착. 이번 변경으로 **bump이 PR head에 prebump 시점에 force-push로 미리 통합**되어 main에 squash 1 commit으로 들어가게 됨 → Vercel rebuild 1회·알림 1회·푸터 버전 즉시 갱신·CHANGELOG 본문 정확 모두 만족.
 
 ### 변경
-- `.github/workflows/version-bump.yml` — 트리거 `pull_request: closed` → `[opened, synchronize, reopened, edited, closed]`. `prebump` job(PR head에 chore(release): commit force-push, 멱등성을 위해 기존 chore(release): 발견 시 reset HEAD~1 후 재계산) + `finalize` job(merge 후 main에서 tag만 push)으로 분리.
-- `.github/workflows/telegram-deploy-notify.yml` — CHANGELOG 추출을 `[Unreleased]` 고정 → 첫 `## [...]` 섹션 일반화. 헤더 라벨(`[v0.5.5]` / `[Unreleased]`)도 동적 추출해서 메시지 본문에 표시.
+- `.github/workflows/version-bump.yml` — 트리거 `pull_request: closed` → `[opened, synchronize, reopened, edited, closed]`. `prebump` job(PR head에 chore(release): commit force-push, 멱등성을 위해 기존 chore(release): 발견 시 reset HEAD~1 후 재계산) + `finalize` job(merge 후 main의 머지 commit에 tag만 push)으로 분리.
+- `.github/workflows/telegram-deploy-notify.yml` — CHANGELOG 추출을 `[Unreleased]` 고정 → 첫 `## [...]` 섹션 일반화. 헤더 라벨(`[v0.5.6]` / `[Unreleased]`)도 동적 추출해서 메시지 본문에 표시.
 - `CLAUDE.md` 「배포 워크플로」 — prebump 시점·1회 알림·finalize tag 분리 흐름 반영.
 
 ### 결정
 - **prebump force-push 패턴**: `--force-with-lease`로 사용자 commit 손실 방지. GITHUB_TOKEN으로 push (PAT 사용 시 워크플로 자기 트리거 가능 → 무한 loop 회피). PR title 변경(edited 트리거) 시에도 reset + 재계산으로 멱등성 보장.
 - **finalize job 분리**: tag만 push이라 Vercel deployment_status 트리거 안 됨 → 추가 알림 발생 안 함. main의 push event는 squash merge로 이미 발생한 1회만.
-- **bump version은 main 기반으로 계산** (Codex P1): PR head의 package.json이 아니라 origin/main의 현재 version에서 bump → 두 release PR 동시 진행 시 같은 next version precompute 회귀 방지.
+- **bump version은 main 기반으로 계산** (Codex P1): PR head의 package.json이 아니라 origin/main의 현재 version에서 bump → 두 release PR 동시 진행 시 같은 next version precompute 회귀 방지. 이번 PR 자체가 정확히 그 케이스를 만남 — PR #9가 진행 중에 머지돼 v0.5.5를 박았고, 우리도 v0.5.5로 precompute한 상태였다. main 머지 후 v0.5.6으로 bump up + 양쪽 [v0.5.5]/[v0.5.6] CHANGELOG 섹션 보존으로 해결. Codex P1 fix가 다음 PR부터 같은 함정을 자동 방지.
 - **finalize는 merge_commit_sha checkout + fetch-tags** (Codex P1·P2): main HEAD가 아닌 PR의 머지 commit에 explicit SHA로 tag → 다른 PR이 그 사이 머지되어도 우리 PR의 commit에 정확히 tag 붙음. fetch-tags로 원격 tag 인식해 rerun 시에도 깔끔히 skip.
 
 ### 추가 (이번 PR self-test 검증)
-- 처음에 GitHub Actions의 `pull_request` 트리거가 base branch(main) `.yml`만 본다고 가정해 self-test 불가로 판단, bump을 PR 본문에 직접 포함시킴(`web/package.json` v0.5.4 → v0.5.5, CHANGELOG `[Unreleased]` → `[v0.5.5]`).
+- 처음에 GitHub Actions의 `pull_request` 트리거가 base branch(main) `.yml`만 본다고 가정해 self-test 불가로 판단, bump을 PR 본문에 직접 포함시킴(`web/package.json` v0.5.4 → v0.5.5, 그 후 PR #9 동시 머지 충돌로 v0.5.6으로 bump up).
 - 실제 push 결과: **`prebump` 워크플로가 PR head의 `.yml` 정의로 자동 발사**됨 — GitHub Actions가 PR head의 워크플로 변경도 트리거에 반영하는 동작. 이번 PR이 곧바로 새 흐름의 첫 검증 케이스가 됐다.
-- prebump은 이미 치환된 CHANGELOG에서 `[Unreleased]` 못 찾고 자동 skip — **멱등성 gate가 의도대로 동작** 확인. 머지 후 새 워크플로의 finalize가 main 머지 commit에 tag v0.5.5 push. 다음 PR(예: 블로그 review pass)에서 prebump의 force-push 경로(`[Unreleased]` 있는 상태)까지 100% 검증 예정.
+- prebump은 이미 치환된 CHANGELOG에서 `[Unreleased]` 못 찾고 자동 skip — **멱등성 gate가 의도대로 동작** 확인.
+- PR #9 동시 머지로 Codex P1 시나리오(두 release PR 동시 진행 시 같은 next version 충돌)를 실시간 재현. main 머지 후 [v0.5.6]으로 bump up하고 CHANGELOG 양쪽 섹션 보존으로 해결. 다음 PR부터는 prebump 워크플로의 main 기반 계산 fix가 자동 방지.
+
+---
+
+## [v0.5.5] - 2026-05-05 - Healthchecks.io ping + run_etl.sh 폐기
+
+GHA cron이 미발사·실패하는 경우 자가 인지가 늦어 데이터 1~2일 비는 사고 위험을 막기 위해 `etl.yml`에 healthchecks.io 3-step ping(start / success / fail) 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 — 값이 없으면 ping 안 보내고 워크플로 계속 진행, 등록 후 다음 firing부터 즉시 효력. 새벽 03:00 KST에 안 돌면 healthchecks.io에서 이메일/Telegram 알림.
+
+부수 정리로 `etl/run_etl.sh` 삭제 — launchd 폐기 + GHA가 inline 명령으로 대체한 뒤로 live consumer 없음. CHANGELOG·blog·TIL의 historical 언급은 의도적으로 유지.
+
+### 결정
+- ADR-010: 외부 watchdog로 healthchecks.io 무료 tier 도입. GHA 자체 모니터링은 scheduler 미발사 케이스를 못 잡아 sufficient하지 않다는 판단. 향후 `/api/health` HTTP check 등 같은 패턴으로 확장 가능.
+
+### 추가
+- `.github/workflows/etl.yml` — healthchecks.io start/success/fail ping 3-step. env hoist로 secret 안전 주입(GHA shell injection 방지 패턴 재사용).
+- `SPEC.md` ADR-010 — 결정 근거·trade-off·영향 기록.
+
+### 변경
+- `tasks.md` — Healthchecks.io ping + run_etl.sh 폐기 항목 [x] 처리, 우선순위 추천 갱신.
+
+### 제거
+- `etl/run_etl.sh` — launchd/cron용 wrapper. live consumer 없음.
 
 ---
 
