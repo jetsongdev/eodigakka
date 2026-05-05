@@ -4,6 +4,38 @@
 
 ---
 
+## [2026-05-05] 함정 6 정확한 fix로 정정 — direct endpoint 채택
+
+a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 차단(`unsupported startup parameter in options: search_path`). PgBouncer 일반 지식을 vendor-specific 환경에 그대로 가져온 게 문제. 1차 fix는 검증 안 한 채 commit + 블로그 결론까지 박았다 — 메타 교훈 1건.
+
+### 수정
+- `etl/fetch_rtms.py` / `.github/workflows/etl.yml`의 `options=...` revert (1c4a185).
+- GitHub Secret `DATABASE_URL`을 direct endpoint(`-pooler` 제거)로 갱신. ETL은 GHA cron 짧은 single connection이라 pooler 이점 0, direct가 본래 적합.
+
+### 추가
+- TIL 함정 6 fix 섹션을 "1차 시도(틀린 fix) → 2차 fix(direct endpoint)" 흐름으로 정정. 교훈에 "Neon pooler ≠ 일반 PgBouncer", "fix 검증 전에 결론 박지 말 것" 2건 추가.
+- 블로그 시리즈 6편(`docs/blog/2026-05-05-neon-migration-series/06-startup-option.md`)을 같은 결론으로 다시 작성 — 두 fix 흐름과 메타 교훈 포함.
+
+### 결정
+- batch ETL은 처음부터 **direct endpoint**. pooler는 web 동시성용. 워크로드 기준으로 endpoint 선택.
+
+---
+
+## [2026-05-05] 블로그 포스팅 시리즈 초안 추가
+
+`docs/blog/2026-05-05-neon-migration-series/` — Neon 마이그레이션 함정 6중을 외부 독자용 narrative로 재구성한 6편 시리즈 (draft 상태). 시리즈 인덱스 + 각 편 frontmatter·outline·draft hook·핵심 코드 스니펫.
+
+### 추가
+- `docs/blog/README.md` 작성 규약 + 시리즈 인덱스
+- `docs/blog/2026-05-05-neon-migration-series/00-index.md` 시리즈 개요
+- 1~6편 draft (`01-launchd-tcc.md` … `06-startup-option.md`)
+- `CLAUDE.md` 문서 단계 표에 `docs/blog/` 항목 추가
+
+### 결정
+- TIL이 1차 기록(현상→원인→수정→교훈, 4단락)이면 블로그는 외부 독자용 narrative — 같은 사고를 다른 시점·청중으로 재구성.
+
+---
+
 ## [2026-05-05] GHA cron 안정화 + launchd 잔재 정리 (issue #1 close)
 
 `workflow_dispatch` 첫 trigger 통과 후 직전 두 run의 `InvalidSchemaName` 분석 — Neon pooler가 transaction-mode 분배 시 일부 backend의 `search_path`에 `public` 누락. 영구 fix는 client-side startup option 1줄.

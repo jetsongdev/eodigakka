@@ -139,41 +139,44 @@ LINE 2:             CREATE TABLE IF NOT EXISTS etl_job_status (
 
 `etl/fetch_rtms.py:218`의 `ensure_etl_status_table`이 unqualified `CREATE TABLE`. Neon role의 `pg_roles.rolconfig`가 비어있어 cluster default `"$user", public`로 fallback. pooler의 transaction-mode 분배에서 일부 backend가 `"$user"`(=neondb_owner) schema 없는 상태로 첫 statement를 받으면 schema 결정 실패. 다음 trigger는 backend 운으로 통과 → 운에 의존하는 깨짐.
 
-**Fix**: `psycopg2.connect(dsn, options="-c search_path=public")` — startup option으로 매 backend connect 시 server-side로 search_path 박힘. transaction pooler 분배와 무관하게 결정적.
+**1차 시도(틀린 fix)**: `psycopg2.connect(dsn, options="-c search_path=public")` — 일반 PgBouncer는 startup parameter로 GUC 주입을 통과시키지만 **Neon pooler는 명시적으로 차단**:
 
-```python
-# etl/fetch_rtms.py
-with psycopg2.connect(db_config.dsn, options="-c search_path=public") as conn:
-    ensure_etl_status_table(conn)
-    ...
-
-# refresh_materialized_views도 동일 적용
-with psycopg2.connect(dsn, options="-c search_path=public") as conn:
-    ...
-
-# .github/workflows/etl.yml post-summary도 동일
-conn = psycopg2.connect(os.environ['DATABASE_URL'], options="-c search_path=public")
+```
+ERROR: unsupported startup parameter in options: search_path.
+Please use unpooled connection or remove this parameter from the startup package.
 ```
 
-`ALTER ROLE neondb_owner SET search_path TO public`도 동일 효과지만 DB 영구 config 변경(blast radius 큼)이라 client 단 startup option이 더 안전.
+(Neon doc: [Connection errors — unsupported startup parameter](https://neon.tech/docs/connect/connection-errors#unsupported-startup-parameter))
+
+**2차 fix(채택)**: **direct (unpooled) endpoint로 전환**. host에서 `-pooler` 제거.
+
+```
+pooler:  ep-red-hill-ao121161-pooler.c-2.ap-southeast-1.aws.neon.tech
+direct:  ep-red-hill-ao121161.c-2.ap-southeast-1.aws.neon.tech
+```
+
+GitHub Secret `DATABASE_URL`만 direct endpoint로 갱신, ETL 코드는 vanilla `psycopg2.connect(dsn)`로 회귀. ETL은 GHA cron에서 짧게 single connection만 쓰는 batch라 pooler 이점 0이고 direct가 본래 더 적합. transaction pooling 자체가 없어서 backend 분배에 의한 search_path 비결정성도 자연 소멸.
+
+`ALTER ROLE neondb_owner SET search_path TO public`도 동일 효과지만 DB 영구 catalog 변경(blast radius 큼)이라 endpoint 전환이 더 surgical.
 
 ### 마이그레이션 최종 상태
 
 - [x] dump → import 완전 적재 (commit 6214840)
-- [x] GitHub Secrets `DATABASE_URL` / `RTMS_KEY` (stdin pipe로 등록)
-- [x] workflow_dispatch run 25360703985 success — trade 5,748 / rent 15,295
+- [x] GitHub Secrets `DATABASE_URL` (direct endpoint) / `RTMS_KEY` (stdin pipe로 등록·갱신)
+- [x] workflow_dispatch direct endpoint 검증 run 25361376291 success
 - [x] launchctl unload (plist는 fallback용 LaunchAgents에 보존)
-- [x] search_path startup option 영구 fix (함정 6 대응)
 - [x] launchd 잔재 `com.chsong.eodigakka-etl.plist` repo에서 삭제 (history는 d611364 commit에 보존)
+- [x] 함정 6 정확한 fix(direct endpoint)로 정정 — 1차 시도였던 startup option은 a2eb788 → 1c4a185로 revert
 
 ## 교훈
 
 - **macOS launchd + ~/Documents = TCC 지뢰밭**. 자동화 데몬 둘 거면 처음부터 `~/projects/`나 `~/Library/Application Support/` 같은 비보호 디렉토리에 둘 것
 - **pg_dump 후처리 grep -v는 위험** — COPY stream의 data row까지 매칭. schema 단위 제외(`--exclude-schema`)가 정공법
-- **Neon pooler vs direct endpoint** — pooler는 transaction pooling이라 statement 간 backend 분배 다름. session-state 의존 작업(SET search_path, prepared statement, 새 extension 즉시 사용)은 fully-qualified 또는 direct endpoint로
+- **Neon pooler vs direct endpoint** — pooler는 transaction pooling이라 statement 간 backend 분배 다름. session-state 의존 작업(SET search_path, prepared statement, 새 extension 즉시 사용)은 fully-qualified 또는 direct endpoint로. **batch ETL이라면 처음부터 direct endpoint** — pooler 이점 없고 함정만 늘림
+- **Neon pooler ≠ 일반 PgBouncer** — startup parameter `options`로 GUC 주입은 일반 PgBouncer에서 통하지만 Neon pooler는 차단. doc 자체가 "use unpooled connection"을 권장. "PgBouncer는 이렇게 동작한다"는 일반 지식을 vendor-specific 환경에 그대로 적용하기 전에 vendor doc 검색 한 번
 - **한 번 발견한 함정은 같은 스크립트 모든 statement에 일관 적용** — 함정 3을 점검 query에만 적용하고 검증 query에 빠뜨려 함정 5 재발. fix 적용할 때 grep으로 동일 패턴(unqualified table 참조) 전수검사할 것
-- **client-side startup option > server-side ALTER ROLE** — search_path 같은 GUC는 connection startup option(`-c key=value`)이 더 surgical. ALTER ROLE은 영구 catalog 변경이라 blast radius가 다른 client(web 등)까지 가고 rollback도 추가 SQL 필요. psycopg2 `options="-c search_path=public"` 한 줄이 transaction pooler에도 결정적
-- **GHA 첫 trigger green = 다음 cron green 보장 아님** — backend lottery로 운 좋게 통과한 뒤 cron firing에서 깨질 수 있음. 처음부터 결정적 fix(startup option) 박을 것
+- **fix를 검증하기 전에 결론을 글로 박지 말 것** — startup option fix를 commit 후 블로그 포스트 06편에 "결정적 통과"라고 미리 선언했지만 실제 trigger는 unsupported error로 fail. 실험 → 통과 확인 → 결론 작성 순서. 검증 안 된 fix는 "1차 시도"로만 표기
+- **GHA 첫 trigger green = 다음 cron green 보장 아님** — backend lottery로 운 좋게 통과한 뒤 cron firing에서 깨질 수 있음. 처음부터 결정적 fix(direct endpoint) 박을 것
 - **셸 변수에 password** — 작은따옴표 + `.env` source 패턴이 영구 안전. URL-encode(`%24` 등) 시도는 client별로 동작 다름
 - **이런 종류의 마이그레이션은 functional → 검증 → 진단 → 수정의 사이클로 빠르게 돌릴 것**. 한 번에 다 하려다 6중 함정에 다 걸렸다면 원인 분리 어려움
 

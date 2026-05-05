@@ -201,10 +201,11 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 | `SPEC.md` | 설계 SSOT — 무엇을 만드는가, ADR-001~007 |
 | `tasks.md` | 실행 단위 TODO (`[ ] / [~] / [x] / [-]`) |
 | `CHANGELOG.md` | 일자별 변경 이력 (추가/변경/수정/결정) |
-| `docs/til/` | 시행착오 기록 (현상→원인→수정→교훈) |
+| `docs/til/` | 시행착오 1차 기록 (현상→원인→수정→교훈, 4단락 양식) |
+| `docs/blog/` | 블로그 포스팅 초안 — TIL을 외부 독자용 narrative로 재구성. 시리즈는 `YYYY-MM-DD-슬러그/` 폴더 + `00-index.md` + 순번 파일. frontmatter `status: draft \| review \| published`. **외부 공유 가치 있는 함정·삽질은 TIL 1차 기록 후 같은 날짜로 블로그 draft도 같이 남길 것** (작성 규약은 `docs/blog/README.md`) |
 | `CLAUDE.md` | 작업 규약 (이 파일) |
 
-작업 끝나고 변경이 있으면 위 4개 문서 중 해당하는 것만 갱신. 코드만 고치고 문서 안 고치면 안 된다.
+작업 끝나고 변경이 있으면 위 5개 문서 중 해당하는 것만 갱신. 코드만 고치고 문서 안 고치면 안 된다.
 
 ---
 

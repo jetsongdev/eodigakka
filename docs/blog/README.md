@@ -1,0 +1,35 @@
+# 블로그 포스팅 초안
+
+`docs/til/`이 1차 기록(현상→원인→수정→교훈, 4단락 양식)이라면, 이 디렉토리는 외부 독자용 narrative로 재구성한 초안.
+
+## 작성 규약
+
+- 파일명: `YYYY-MM-DD-슬러그/` 폴더 또는 `YYYY-MM-DD-슬러그.md` 단편.
+- 시리즈는 폴더 + `00-index.md` + `01.md`부터 순번. 각 편 독립적으로 검색 친화적.
+- frontmatter:
+
+```yaml
+---
+title: "글 제목"
+series: "시리즈 이름 (단편이면 생략)"
+part: 1
+date: 2026-05-05
+status: draft   # draft | review | published
+tags: [postgres, neon, devops]
+---
+```
+
+- TIL과 cross-reference: 본문 끝 "참고" 섹션에 원본 TIL 링크.
+
+## 시리즈 인덱스
+
+### 2026-05-05 — `~/Documents`에서 ETL 자동화하다 함정 6개 만난 이야기 (Neon 마이그레이션)
+
+[`2026-05-05-neon-migration-series/`](./2026-05-05-neon-migration-series/) — 6편 시리즈.
+
+1. [macOS launchd가 ~/Documents를 못 본다](./2026-05-05-neon-migration-series/01-launchd-tcc.md)
+2. [`$`가 들어간 비번이 셸에서 잘리는 이유](./2026-05-05-neon-migration-series/02-shell-password-escape.md)
+3. [Neon pooler에서 PostGIS_Version()이 안 보이는 이유](./2026-05-05-neon-migration-series/03-pooler-search-path.md)
+4. [pg_dump 후처리 grep이 COPY 데이터를 잘라먹은 사건](./2026-05-05-neon-migration-series/04-pg-dump-copy-stream.md)
+5. [같은 함정에 두 번 빠진 이유 — fix 적용 일관성](./2026-05-05-neon-migration-series/05-fix-consistency.md)
+6. [`InvalidSchemaName`과 두 번의 fix — pooler에서 direct endpoint로](./2026-05-05-neon-migration-series/06-startup-option.md)
