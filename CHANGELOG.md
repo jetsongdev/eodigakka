@@ -25,8 +25,10 @@
 - **bump version은 main 기반으로 계산** (Codex P1): PR head의 package.json이 아니라 origin/main의 현재 version에서 bump → 두 release PR 동시 진행 시 같은 next version precompute 회귀 방지.
 - **finalize는 merge_commit_sha checkout + fetch-tags** (Codex P1·P2): main HEAD가 아닌 PR의 머지 commit에 explicit SHA로 tag → 다른 PR이 그 사이 머지되어도 우리 PR의 commit에 정확히 tag 붙음. fetch-tags로 원격 tag 인식해 rerun 시에도 깔끔히 skip.
 
-### 추가 (이번 PR self-test)
-- 이 PR이 self-test 불가능(main의 옛 워크플로가 prebump 트리거 안 함)이라 bump을 PR 본문에 직접 포함시킴 — `web/package.json` v0.5.4 → v0.5.5, CHANGELOG `[Unreleased]` → `[v0.5.5]`. 머지 후 새 워크플로의 finalize가 main 머지 commit에 tag v0.5.5 push. 다음 PR부터 prebump 자동 동작.
+### 추가 (이번 PR self-test 검증)
+- 처음에 GitHub Actions의 `pull_request` 트리거가 base branch(main) `.yml`만 본다고 가정해 self-test 불가로 판단, bump을 PR 본문에 직접 포함시킴(`web/package.json` v0.5.4 → v0.5.5, CHANGELOG `[Unreleased]` → `[v0.5.5]`).
+- 실제 push 결과: **`prebump` 워크플로가 PR head의 `.yml` 정의로 자동 발사**됨 — GitHub Actions가 PR head의 워크플로 변경도 트리거에 반영하는 동작. 이번 PR이 곧바로 새 흐름의 첫 검증 케이스가 됐다.
+- prebump은 이미 치환된 CHANGELOG에서 `[Unreleased]` 못 찾고 자동 skip — **멱등성 gate가 의도대로 동작** 확인. 머지 후 새 워크플로의 finalize가 main 머지 commit에 tag v0.5.5 push. 다음 PR(예: 블로그 review pass)에서 prebump의 force-push 경로(`[Unreleased]` 있는 상태)까지 100% 검증 예정.
 
 ---
 
