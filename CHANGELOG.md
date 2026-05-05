@@ -4,6 +4,81 @@
 
 ---
 
+## [2026-05-05] UX 마무리 라운드 — 슬라이더 비동기 색칠 + 사이드패널 분포 차트 + 모바일 collapsible
+
+`tasks.md` A. UX 마무리 갈래 3건 동시 처리. 슬라이더는 드래그 종료(`onValueCommit`)에서만 색칠하던 것을 드래그 중(`onValueChange`) 150ms debounce로 비동기 갱신, in-flight `/api/affordable` fetch는 `AbortController.abort()`로 cancel해 race를 막았다. 사이드패널은 `mv_dong_stats`의 `p25/median/p75`를 `/api/dong/[bjd]/complexes` 응답에 `distributions[]`로 노출하고 SVG 박스플롯으로 매매·전세 양쪽을 같은 가로축에 그렸다(현재 모드는 100%, 비교 모드는 55% 투명). 모바일(`max-width: 640px`)에서는 ControlPanel을 기본 접힘 상태로 시작하고 1줄 요약(`27개 동 · 매매 · 4억~8억 · M형`)만 노출, 사용자 토글 후에는 자동 동기화를 멈춰 선택을 존중한다. e2e 테스트 12개 모두 통과.
+
+### 추가
+- `web/app/api/dong/[bjd]/complexes/route.ts` — `mv_dong_stats` SELECT으로 `distributions[]`(mode×size_bucket별 p25/p50/p75/tx_count) 추가
+- `web/app/page.tsx` `DistributionChart` SVG 컴포넌트 — IQR 박스 + median 세로선 + p25/p75 숫자 라벨, size='all'이면 표본 최대 버킷 자동 선택
+- `web/app/page.tsx` `ControlPanelBody` 분리 — collapsed 상태와 본문을 분리해 mobile collapsible 구현
+- `web/app/page.tsx` `userToggledRef` — 사용자가 토글 후에는 viewport 변경에 의해 자동 펼침/접힘 안 되도록
+
+### 변경
+- `CashRangeSlider` `onValueChange`에 `setTimeout(onChange, 150)` debounce — 드래그 중에도 색칠 갱신
+- `CashRangeSlider` `onValueCommit`은 pending timer를 clear하고 즉시 호출 — 드래그 종료 시 latency 0
+- `/api/affordable` fetch에 `signal: controller.signal` — `cancelled` flag 외에 실제 네트워크 요청도 abort
+- `useEffect` cleanup에서 `AbortError`는 무시 (의도된 cancel)
+
+### 결정
+- 분포 차트는 SVG 직접 — `recharts`/`visx` 의존성 추가 회피, 박스플롯 1개라 30줄로 충분
+- 모바일 SidePanel은 본 라운드 scope 밖 (bottom sheet 패턴은 후속) — 현재 collapsible은 ControlPanel만
+- "매매·전세 동시 비교"는 분포 차트에 흡수 — 별도 카드 만들지 않음
+
+### 수정
+- 지도 init useEffect 방어 강화 — WebGL 사전 probe, `new Map()` try/catch, `failIfMajorPerformanceCaveat: false`, `map.on('error')`, cleanup `try { map.remove() }`. dev에서 StrictMode + HMR로 누적된 WebGL 컨텍스트 누수가 `Failed to initialize WebGL` throw로 이어지던 함정 (TIL `2026-05-05-mapbox-webgl-strictmode`). Playwright fresh 세션에서는 정상이라 검증 사각지대였다.
+- 에러 안내 박스 `whiteSpace: 'pre-line'` + `lineHeight: 1.55` + `maxWidth: 420` — WebGL 점검 4단계 안내가 한 문단으로 뭉치던 것을 줄바꿈 보존.
+
+---
+
+## [2026-05-05] Cash 변경 +/- 칩 + 결과 카드 위계 + 데이터 출처 attribution
+
+슬라이더 변경 결과를 정량으로 노출 + Evidence 가독성 개선 + 데이터 출처 명시. snapshot 06 캡처.
+
+### 추가
+- `CashDeltaChip` 컴포넌트 — 자금 슬라이더 변경 시 추가/제거 동 카운트(`+N` 초록 / `−N` 빨강)를 자금 범위 텍스트 옆 둥근 배지로 표시. 다음 변경이 올 때까지 유지(자동 fade-out 없음, mode/size 변경 시 reset). `prevMatchedRef` + `lastFilterCtxRef`로 mode/size 변경의 첫 호출은 delta 비표시.
+- `Footer` 컴포넌트 — 페이지 하단 일반 푸터(non-floating). outer를 flex column으로 묶어 지도(`flex: 1`) + 푸터(`flex-shrink: 0`)로 분리. 두 줄:
+  - **면책**: `이 사이트는 임장 후보를 색칠지도로 제시할 뿐, 매매 권유나 투자 자문이 아닙니다. 결과는 RTMS 신고분 기준 통계로 단정문이 아닌 후보 제시이며, 실제 거래 판단은 사용자 본인 책임.` (청사진 9원리 사용자 가시 표기)
+  - **데이터/버전**: `국토교통부 RTMS · V-World LSMD 법정동 · © Mapbox/OpenStreetMap | RTMS 2026-05-03 신고분까지 | v0.1.0 #4e02b3a`
+  - 처음엔 좌하단 floating `DataSourceAttribution`으로 시작했으나 면책 추가로 텍스트가 길어져 푸터 패턴으로 전환.
+- `formatMan` helper — 1억(=10000만) 이상이면 `4억` / `4.5억`, 미만이면 `5천만` / `4500만` / `0`. 기존 `manToEok`은 `(man/10000).toFixed(0)`로 4.5억 → "5억" 반올림 버그가 있었던 부분 자연 해결.
+- `web/next.config.js` (신규) — `NEXT_PUBLIC_APP_VERSION` (package.json version), `NEXT_PUBLIC_GIT_SHA` (`git rev-parse --short HEAD`)를 빌드 타임에 inject. dev/prod 양쪽에서 동일 작동.
+
+### 변경
+- 결과 카드 구조 — 한 줄 평문 evidence(`조건 일치 N개 동, 모드 TRADE, 현금 NNNN~NNNN만원`)에서 두 줄 위계로:
+  - 22pt 큰 숫자 + `개 동 통과` (강조)
+  - 11pt 메타: `매매 · 4억~8억 · M형` (보조)
+- evidence 문자열도 새 포맷(`N개 동 통과 · 매매 · 4억~8억`)으로 client에서 재생성.
+- 슬라이더 좌우 라벨 / 자금 범위 라벨 모두 `formatMan` 적용 — 1억 이상 자동 억 단위.
+- ControlPanel 카드 하단 `폴리곤 N개 · RTMS 신고분까지`에서 freshness 표기 제거 — attribution 박스로 일원화.
+- e2e `map.spec.ts` — evidence selector를 `/(매매|전세) · .+~.+ · /`로, cash 검증을 `'3억~8억'` 식 한국어 표기로 갱신.
+
+### 결정
+- delta 칩 fade-out timeout 안 둠 — 캡처/검증 타이밍 의존성 제거 + 사용자가 슬라이더 멈춘 후에도 직전 변경량 확인 가능.
+- attribution은 작은 박스로 — 대부분의 OSS 지도 서비스 관행과 일관, 가독성 해치지 않음.
+- `+/-` 색상은 결과 카드 강조색(초록 `#1f6e3a`, 빨강 `#a13030`)과 일관.
+
+---
+
+## [2026-05-05] 슬라이더 latency 0 — 클라 사이드 cash 필터로 전환
+
+기존 debounce 150ms + AbortController 패턴은 여전히 매 입력마다 네트워크 왕복(평균 50~100ms)이 발생해 슬라이더 핸들 이동과 색칠 사이에 가시적 lag이 있었다. 같은 mode×size에서는 cash 범위만 바뀌면 표본 자체가 동일하므로, mode/size 변경 시 한 번만 fetch하고 cash 필터는 client 메모리에서 처리하도록 데이터 흐름을 재설계. 키보드로 슬라이더 25ms 간격 20회 이동하는 동안 `/api/affordable` 호출 0회 — 진짜 실시간 반응.
+
+### 변경
+- `web/app/page.tsx` 데이터 흐름 분리 — useEffect 두 개로:
+  - **2-A**: `[query.mode, query.size]` 변경 시에만 fetch. cash 범위는 wide-open(0~50억)으로 보내 mode×size별 전체 동을 캐시(`allDongs` state).
+  - **2-B**: `[allDongs, query.cashMin, query.cashMax]` 변경 시 client filter + map feature-state 갱신. network roundtrip 없음.
+- `CashRangeSlider` debounce·AbortController 패턴 제거 — `onValueChange` 즉시 onChange. `onValueCommit` 분기도 제거(필요 없음).
+- `buildAffordableUrl` helper 삭제 (dead code).
+- Evidence 텍스트는 client에서 매번 재구성 — `조건 일치 N개 동, 모드 …, 현금 …`.
+
+### 결정
+- 서버 사이드 cash 필터는 API에 그대로 유지 — 직접 API 호출 사용처(외부 통합, smoke test) 호환.
+- `data_freshness`는 fetch 시점에만 갱신 — cash 슬라이더 이동에는 영향 없음 (RTMS 신고일자는 cash와 독립).
+- Effect 2-B의 `removeFeatureState({ source })` + 재설정 패턴은 그대로 — 467개 dongs 기준 단일 frame 내 처리 가능. 추후 diff 기반으로 최적화 여지 있으나 본 라운드 scope 밖.
+
+---
+
 ## [2026-05-05] 다음 라운드 후보 정리
 
 `tasks.md` 상단에 "다음 라운드 후보 (2026-05-05 기준)" 섹션 추가. Neon 마이그레이션 + GHA cron 안정화 직후 시점에서 4갈래 후보(A. UX 잔여 / B. 운영 모니터링 / C. 블로그 풀 초안 / D. Phase 2)로 분류, 각 갈래별 트리거 조건 명시.

@@ -57,3 +57,4 @@ tsconfig.tsbuildinfo
 # Playwright e2e 실행 결과
 web/test-results/
 web/playwright-report/
+test-results/

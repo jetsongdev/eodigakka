@@ -14,6 +14,9 @@ eodigakka 프로젝트 진행하며 마주친 시행착오·해결 기록.
 ### Infra
 - [launchd TCC 차단 → Neon 마이그레이션 함정 6중 (완료)](2026-05-05-neon-migration-tcc-launchd.md) — [issue #1](https://github.com/jetsongdev/eodigakka/issues/1)
 
+### Frontend
+- [Mapbox WebGL 컨텍스트 누수 — StrictMode + HMR이 합쳐지면 `new Map()` throw](2026-05-05-mapbox-webgl-strictmode.md)
+
 ---
 
 ## 2026-05-04 (Phase 0~1)

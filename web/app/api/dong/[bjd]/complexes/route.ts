@@ -24,6 +24,16 @@ interface RecentTransactionRow {
   contract_date: string;
 }
 
+interface DistributionRow {
+  mode: 'TRADE' | 'JEONSE';
+  size_bucket: 'S' | 'M' | 'L';
+  p25_man: number | null;
+  median_man: number | null;
+  p75_man: number | null;
+  tx_count_3m: number;
+  confidence: 'high' | 'low' | 'insufficient';
+}
+
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ bjd: string }> },
@@ -37,7 +47,7 @@ export async function GET(
     );
   }
 
-  const [dongNameResult, tradeTopResult, jeonseTopResult, recentResult] = await Promise.all([
+  const [dongNameResult, tradeTopResult, jeonseTopResult, recentResult, distributionResult] = await Promise.all([
     sql<{ bjd_name: string | null }>`
       SELECT bjd_name
       FROM bjd_polygon
@@ -96,6 +106,18 @@ export async function GET(
       ORDER BY contract_date DESC
       LIMIT 10
     `.execute(db),
+    sql<DistributionRow>`
+      SELECT
+        mode,
+        size_bucket,
+        CAST(p25_man AS DOUBLE PRECISION) AS p25_man,
+        CAST(median_man AS DOUBLE PRECISION) AS median_man,
+        CAST(p75_man AS DOUBLE PRECISION) AS p75_man,
+        tx_count_3m::int AS tx_count_3m,
+        confidence
+      FROM mv_dong_stats
+      WHERE bjd_code = ${bjd}
+    `.execute(db),
   ]);
 
   const bjdName = dongNameResult.rows[0]?.bjd_name;
@@ -136,6 +158,15 @@ export async function GET(
       floor: row.floor,
       contract_date: row.contract_date,
       evidence: `RTMS ${row.contract_date} 신고분`,
+    })),
+    distributions: distributionResult.rows.map((row) => ({
+      mode: row.mode,
+      size_bucket: row.size_bucket,
+      p25_man: row.p25_man === null ? null : Math.round(Number(row.p25_man)),
+      median_man: row.median_man === null ? null : Math.round(Number(row.median_man)),
+      p75_man: row.p75_man === null ? null : Math.round(Number(row.p75_man)),
+      tx_count_3m: Number(row.tx_count_3m),
+      confidence: row.confidence,
     })),
     generated_at: new Date().toISOString(),
     evidence: buildEvidence(recentResult.rows.length, tradeTopResult.rows.length + jeonseTopResult.rows.length, lastEvidenceDate),

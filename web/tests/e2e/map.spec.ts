@@ -40,7 +40,7 @@ test('폴리곤 카운트 표시가 보인다', async ({ page }) => {
 test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }) => {
   await openMap(page);
 
-  const evidence = page.getByText(/조건 일치 .* 모드 (TRADE|JEONSE), 현금 .*만원/);
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   await expect(evidence).toBeVisible();
   const before = (await evidence.textContent()) ?? '';
 
@@ -48,7 +48,7 @@ test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('모드 JEONSE');
+    .toContain('전세 ·');
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
     .not.toBe(before);
@@ -57,7 +57,7 @@ test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }
 test('cash 카세트 — 좌측 버튼은 최소만, 우측 버튼은 최대만 변경된다', async ({ page }) => {
   await openMap(page);
 
-  const evidence = page.getByText(/조건 일치 .* 모드 (TRADE|JEONSE), 현금 .*만원/);
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   await expect(evidence).toBeVisible();
 
   // 시작: 4억~8억. 최소 -1억 → 3억~8억
@@ -65,7 +65,7 @@ test('cash 카세트 — 좌측 버튼은 최소만, 우측 버튼은 최대만 
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('현금 30000~80000만원');
+    .toContain('3억~8억');
 
   // 최대 +1억 두 번 → 3억~10억
   await page.getByRole('button', { name: '최대 +1억' }).click();
@@ -73,13 +73,13 @@ test('cash 카세트 — 좌측 버튼은 최소만, 우측 버튼은 최대만 
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('현금 30000~100000만원');
+    .toContain('3억~10억');
 });
 
 test('cash 카세트 — ±10억 버튼이 큰 폭 점프를 한다', async ({ page }) => {
   await openMap(page);
 
-  const evidence = page.getByText(/조건 일치 .* 모드 (TRADE|JEONSE), 현금 .*만원/);
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   await expect(evidence).toBeVisible();
 
   // 시작: 4억~8억. 최대 +10억 → 4억~18억
@@ -87,20 +87,20 @@ test('cash 카세트 — ±10억 버튼이 큰 폭 점프를 한다', async ({ p
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('현금 40000~180000만원');
+    .toContain('4억~18억');
 
-  // 최소 -10억 → clamp 0 → 0억~18억 (4억 - 10억은 음수라 0으로 clamp)
+  // 최소 -10억 → clamp 0 → 0~18억 (4억 - 10억은 음수라 0으로 clamp)
   await page.getByRole('button', { name: '최소 -10억' }).click();
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
-    .toContain('현금 0~180000만원');
+    .toContain('0~18억');
 });
 
 test('size 토글 S 선택 시 evidence 텍스트가 유지되며 새 쿼리가 반영된다', async ({ page }) => {
   await openMap(page);
 
-  const evidence = page.getByText(/조건 일치 .* 모드 (TRADE|JEONSE), 현금 .*만원/);
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   const before = (await evidence.textContent()) ?? '';
 
   await page.getByRole('button', { name: 'S (60㎡미만)' }).click();

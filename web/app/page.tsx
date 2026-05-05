@@ -61,12 +61,23 @@ interface RecentTransaction {
   evidence: string;
 }
 
+interface DongDistribution {
+  mode: 'TRADE' | 'JEONSE';
+  size_bucket: SizeBucket;
+  p25_man: number | null;
+  median_man: number | null;
+  p75_man: number | null;
+  tx_count_3m: number;
+  confidence: 'high' | 'low' | 'insufficient';
+}
+
 interface DongDetailsResponse {
   bjd_code: string;
   bjd_name: string;
   trade_top5: TopComplex[];
   jeonse_top5: TopComplex[];
   recent_transactions: RecentTransaction[];
+  distributions: DongDistribution[];
   generated_at: string;
   evidence: string;
 }
@@ -98,18 +109,16 @@ const CASH_MIN = 0;        // 0억
 const CASH_MAX = 500000;   // 50억 (강북 14구 매매 p99 26억, max 156억 outlier 1건은 cover하지 않음)
 const CASH_STEP = 5000;    // 5천만원 단위
 
-function buildAffordableUrl(q: AffordableQueryState): string {
-  const params = new URLSearchParams({
-    mode: q.mode,
-    cash_min: String(q.cashMin),
-    cash_max: String(q.cashMax),
-    size: q.size,
-  });
-  return `/api/affordable?${params}`;
-}
-
-function manToEok(man: number): string {
-  return `${(man / 10000).toFixed(0)}억`;
+// 1억(=10000만) 이상은 "4억" / "4.5억", 미만은 "5천만" 또는 "4500만". 0은 그대로 "0".
+function formatMan(man: number): string {
+  if (man <= 0) return '0';
+  if (man < 10000) {
+    if (man % 1000 === 0) return `${man / 1000}천만`;
+    return `${man.toLocaleString()}만`;
+  }
+  const eok = man / 10000;
+  if (Math.abs(eok - Math.round(eok)) < 0.01) return `${Math.round(eok)}억`;
+  return `${eok.toFixed(1)}억`;
 }
 
 export default function MapPage() {
@@ -118,12 +127,20 @@ export default function MapPage() {
   const [error, setError] = useState<string | null>(null);
   const [polygonCount, setPolygonCount] = useState<number | null>(null);
   const [affordable, setAffordable] = useState<AffordableResponse | null>(null);
+  // mode×size별 전체 동 캐시 — cash 필터는 client에서 적용해 슬라이더 latency 0
+  const [allDongs, setAllDongs] = useState<AffordableDongResponse[]>([]);
+  const [dataFreshness, setDataFreshness] = useState<string>('');
   const [query, setQuery] = useState<AffordableQueryState>(DEFAULT_QUERY);
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
+  // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
+  // 다음 cash 변경 또는 mode/size 변경 시까지 유지(자동 fade-out 없음)
+  const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
+  const prevMatchedRef = useRef<Set<string>>(new Set());
+  const lastFilterCtxRef = useRef<{ mode: QueryMode; size: SizeOption } | null>(null);
 
   // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
   const affordableMapRef = useRef<Map<string, AffordableDongResponse>>(new Map());
@@ -140,17 +157,55 @@ export default function MapPage() {
     }
     if (!containerRef.current || mapRef.current) return;
 
+    // WebGL 사전 체크 — 컨텍스트 생성 자체가 실패하면 mapbox `new Map()`이 throw한다.
+    // StrictMode + HMR로 누수가 쌓이거나 GPU 가속이 차단된 환경을 즉시 식별.
+    const probeCanvas = document.createElement('canvas');
+    const probeGl =
+      probeCanvas.getContext('webgl2') ||
+      probeCanvas.getContext('webgl') ||
+      probeCanvas.getContext('experimental-webgl');
+    if (!probeGl) {
+      setError(
+        'WebGL 초기화 실패 — 브라우저가 WebGL 컨텍스트를 거부했습니다.\n\n' +
+          '점검 순서:\n' +
+          '(1) chrome://settings/system → "그래픽 가속 사용" ON → Chrome 재시작\n' +
+          '(2) chrome://gpu → "WebGL: Hardware accelerated" 확인\n' +
+          '(3) chrome://flags/#ignore-gpu-blocklist Enabled, #use-angle = Metal\n' +
+          '(4) 또는 Safari/Firefox에서 열어보세요.\n\n' +
+          '많은 탭이 누적된 dev 세션이면 Chrome 완전 종료 후 재기동이 즉시 회복법.',
+      );
+      return;
+    }
+
     mapboxgl.accessToken = token;
 
-    const map = new mapboxgl.Map({
-      container: containerRef.current,
-      style: 'mapbox://styles/mapbox/light-v11',
-      center: SEOUL_CENTER,
-      zoom: DEFAULT_ZOOM,
-      minZoom: 9,
-      maxZoom: 16,
-    });
+    let map: mapboxgl.Map;
+    try {
+      map = new mapboxgl.Map({
+        container: containerRef.current,
+        style: 'mapbox://styles/mapbox/light-v11',
+        center: SEOUL_CENTER,
+        zoom: DEFAULT_ZOOM,
+        minZoom: 9,
+        maxZoom: 16,
+        // 성능 caveat 시에도 컨텍스트 생성 — Apple Silicon 일부 환경에서 보호
+        failIfMajorPerformanceCaveat: false,
+      });
+    } catch (err) {
+      setError(
+        `Mapbox 초기화 실패: ${err instanceof Error ? err.message : String(err)} — 브라우저 재시작 후 다시 시도해 주세요.`,
+      );
+      return;
+    }
     mapRef.current = map;
+
+    // mapbox 내부에서 WebGL 컨텍스트 손실 시 onError 발생 — 명시적으로 처리
+    map.on('error', (e) => {
+      const msg = e?.error?.message ?? 'mapbox 알 수 없는 오류';
+      if (msg.toLowerCase().includes('webgl')) {
+        setError(`WebGL 컨텍스트 손실: ${msg} — 새로고침해 주세요.`);
+      }
+    });
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 
@@ -236,56 +291,103 @@ export default function MapPage() {
     });
 
     return () => {
-      map.remove();
+      // StrictMode / HMR cleanup이 실패해도 ref를 비워야 다음 mount가 init을 진행한다.
+      try {
+        map.remove();
+      } catch {
+        // mapbox 내부 cleanup이 실패해도 useEffect cleanup은 throw하지 않는다
+      }
       mapRef.current = null;
     };
   }, []);
 
-  // 2) 쿼리가 바뀔 때마다 /api/affordable 재호출 + feature-state 갱신
+  // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    const url = `/api/affordable?mode=${query.mode}&cash_min=${CASH_MIN}&cash_max=${CASH_MAX}&size=${query.size}`;
+    fetch(url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`/api/affordable HTTP ${res.status}`);
+        return res.json() as Promise<AffordableResponse>;
+      })
+      .then((af) => {
+        if (cancelled) return;
+        setAllDongs(af.dongs);
+        setDataFreshness(af.data_freshness);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [query.mode, query.size]);
+
+  // 2-B) cash 슬라이더 변경 시 클라 사이드 필터 + map feature-state 갱신
+  // network roundtrip 없으므로 onValueChange 매 호출마다 즉시 반영
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    async function applyQuery() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(buildAffordableUrl(query));
-        if (!res.ok) throw new Error(`/api/affordable HTTP ${res.status}`);
-        const af: AffordableResponse = await res.json();
-        if (cancelled) return;
+    const matched = allDongs.filter(
+      (d) => d.median_man >= query.cashMin && d.median_man <= query.cashMax,
+    );
 
-        // map이 load 끝났는지 확인 — addSource 이전에 setFeatureState하면 noop
-        const tryApply = () => {
-          if (!map || cancelled) return;
-          if (!map.getSource(POLYGONS_SOURCE_ID)) {
-            map.once('idle', tryApply);
-            return;
-          }
-          // 이전 색칠 초기화 (현재 map에 담긴 모든 feature-state 리셋)
-          map.removeFeatureState({ source: POLYGONS_SOURCE_ID });
-          for (const dong of af.dongs) {
-            map.setFeatureState(
-              { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
-              { color: dong.color, matched: true },
-            );
-          }
-        };
-        tryApply();
-        setAffordable(af);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!cancelled) setLoading(false);
+    // delta 계산 — mode/size 동일 컨텍스트일 때만 cash 변경에 의한 +/- 표시
+    const newSet = new Set(matched.map((d) => d.bjd_code));
+    const prev = prevMatchedRef.current;
+    const ctx = lastFilterCtxRef.current;
+    const ctxSame = ctx !== null && ctx.mode === query.mode && ctx.size === query.size;
+    if (ctxSame) {
+      let added = 0;
+      let removed = 0;
+      for (const code of newSet) if (!prev.has(code)) added++;
+      for (const code of prev) if (!newSet.has(code)) removed++;
+      if (added > 0 || removed > 0) {
+        // 다음 변경이 올 때까지 칩 유지
+        setCashDelta({ added, removed });
       }
+    } else {
+      // mode/size가 바뀐 첫 호출 — delta 비표시, ref만 갱신
+      setCashDelta(null);
     }
+    prevMatchedRef.current = newSet;
+    lastFilterCtxRef.current = { mode: query.mode, size: query.size };
 
-    applyQuery();
-    return () => {
-      cancelled = true;
+    const modeLabel = query.mode === 'trade' ? '매매' : '전세';
+    setAffordable({
+      dongs: matched,
+      generated_at: new Date().toISOString(),
+      data_freshness: dataFreshness,
+      evidence: `${matched.length}개 동 통과 · ${modeLabel} · ${formatMan(query.cashMin)}~${formatMan(query.cashMax)}`,
+    });
+
+    const tryApply = () => {
+      if (!map.getSource(POLYGONS_SOURCE_ID)) {
+        map.once('idle', tryApply);
+        return;
+      }
+      map.removeFeatureState({ source: POLYGONS_SOURCE_ID });
+      for (const dong of matched) {
+        map.setFeatureState(
+          { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
+          { color: dong.color, matched: true },
+        );
+      }
     };
-  }, [query]);
+    tryApply();
+  }, [allDongs, query.cashMin, query.cashMax, query.mode, dataFreshness]);
 
   // 3) selectedBjd 변경 시 동 상세 fetch
   useEffect(() => {
@@ -315,53 +417,62 @@ export default function MapPage() {
   }, [selectedBjd]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh' }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      <ControlPanel
-        query={query}
-        onQueryChange={setQuery}
-        affordable={affordable}
-        polygonCount={polygonCount}
-        loading={loading}
-      />
-
-      {hover && (
-        <HoverTooltip
-          hover={hover}
-          dong={affordableMapRef.current.get(hover.bjdCode) ?? null}
+        <ControlPanel
+          query={query}
+          onQueryChange={setQuery}
+          affordable={affordable}
+          polygonCount={polygonCount}
+          loading={loading}
+          cashDelta={cashDelta}
         />
-      )}
 
-      {selectedBjd && (
-        <SidePanel
-          bjdCode={selectedBjd}
-          dong={affordableMapRef.current.get(selectedBjd) ?? null}
-          details={dongDetails}
-          loading={dongDetailsLoading}
-          mode={query.mode}
-          onClose={() => setSelectedBjd(null)}
-        />
-      )}
+        {hover && (
+          <HoverTooltip
+            hover={hover}
+            dong={affordableMapRef.current.get(hover.bjdCode) ?? null}
+          />
+        )}
 
-      {error && (
+        {selectedBjd && (
+          <SidePanel
+            bjdCode={selectedBjd}
+            dong={affordableMapRef.current.get(selectedBjd) ?? null}
+            details={dongDetails}
+            loading={dongDetailsLoading}
+            mode={query.mode}
+            size={query.size}
+            onClose={() => setSelectedBjd(null)}
+          />
+        )}
+
+        {error && (
         <div
           style={{
             position: 'absolute',
             top: 12,
             right: 60,
-            padding: '10px 14px',
+            padding: '12px 16px',
             background: '#fff5f5',
             border: '1px solid #f5b5b5',
             color: '#922',
             borderRadius: 6,
             zIndex: 1,
-            maxWidth: 380,
+            maxWidth: 420,
+            whiteSpace: 'pre-line',
+            lineHeight: 1.55,
+            fontSize: 13,
           }}
         >
           {error}
         </div>
-      )}
+        )}
+      </div>
+
+      <Footer dataFreshness={affordable?.data_freshness ?? null} />
     </div>
   );
 }
@@ -372,12 +483,14 @@ function ControlPanel({
   affordable,
   polygonCount,
   loading,
+  cashDelta,
 }: {
   query: AffordableQueryState;
   onQueryChange: (next: AffordableQueryState) => void;
   affordable: AffordableResponse | null;
   polygonCount: number | null;
   loading: boolean;
+  cashDelta: { added: number; removed: number } | null;
 }) {
   const sizeLabel: Record<SizeOption, string> = {
     S: 'S (60㎡미만)',
@@ -386,25 +499,123 @@ function ControlPanel({
     all: '전체',
   };
 
+  // 모바일에서는 기본 접힘. matchMedia 변경 시 isMobile만 갱신하고 collapsed는 사용자 선택을 존중.
+  const [isMobile, setIsMobile] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const sync = () => {
+      setIsMobile(mq.matches);
+      // 첫 평가 또는 사용자가 토글하지 않았을 때만 자동 동기화
+      if (!userToggledRef.current) setCollapsed(mq.matches);
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  function toggleCollapsed() {
+    userToggledRef.current = true;
+    setCollapsed((c) => !c);
+  }
+
+  const summary = loading
+    ? '쿼리 중...'
+    : affordable
+      ? `${affordable.dongs.length}개 동 · ${query.mode === 'trade' ? '매매' : '전세'} · ${formatMan(query.cashMin)}~${formatMan(query.cashMax)} · ${query.size}형`
+      : '준비 중...';
+
   return (
     <div
       style={{
         position: 'absolute',
         top: 12,
         left: 12,
-        padding: '12px 14px',
+        padding: collapsed ? '8px 12px' : '12px 14px',
         background: 'rgba(255,255,255,0.96)',
         borderRadius: 8,
         fontSize: 13,
         boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
         zIndex: 2,
-        width: 320,
+        width: isMobile ? 'calc(100vw - 24px)' : 320,
+        maxWidth: isMobile ? 360 : 320,
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>
-        eodigakka — 임장 후보 색칠지도
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: collapsed ? 0 : 8,
+          gap: 8,
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: 13, flex: 1, minWidth: 0 }}>
+          {collapsed ? (
+            <span style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, fontSize: 12, color: '#333' }}>
+              {summary}
+            </span>
+          ) : (
+            'eodigakka — 임장 후보 색칠지도'
+          )}
+        </div>
+        {isMobile && (
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? '컨트롤 펼치기' : '컨트롤 접기'}
+            aria-expanded={!collapsed}
+            style={{
+              border: '1px solid #ccc',
+              background: '#fff',
+              borderRadius: 4,
+              padding: '2px 8px',
+              fontSize: 12,
+              cursor: 'pointer',
+              color: '#333',
+              flexShrink: 0,
+            }}
+          >
+            {collapsed ? '펼치기 ▾' : '접기 ▴'}
+          </button>
+        )}
       </div>
 
+      {collapsed ? null : (
+        <ControlPanelBody
+          query={query}
+          onQueryChange={onQueryChange}
+          affordable={affordable}
+          polygonCount={polygonCount}
+          loading={loading}
+          sizeLabel={sizeLabel}
+          cashDelta={cashDelta}
+        />
+      )}
+    </div>
+  );
+}
+
+function ControlPanelBody({
+  query,
+  onQueryChange,
+  affordable,
+  polygonCount,
+  loading,
+  sizeLabel,
+  cashDelta,
+}: {
+  query: AffordableQueryState;
+  onQueryChange: (next: AffordableQueryState) => void;
+  affordable: AffordableResponse | null;
+  polygonCount: number | null;
+  loading: boolean;
+  sizeLabel: Record<SizeOption, string>;
+  cashDelta: { added: number; removed: number } | null;
+}) {
+  return (
+    <>
       {/* 모드 토글 */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
         {(['trade', 'jeonse'] as const).map((m) => (
@@ -434,6 +645,7 @@ function ControlPanel({
         min={query.cashMin}
         max={query.cashMax}
         onChange={(min, max) => onQueryChange({ ...query, cashMin: min, cashMax: max })}
+        cashDelta={cashDelta}
       />
 
 
@@ -463,29 +675,39 @@ function ControlPanel({
         </div>
       </div>
 
-      {/* 결과 카드 */}
+      {/* 결과 카드 — count는 큰 숫자, 메타 정보는 작게 */}
       <div
         style={{
-          padding: '6px 8px',
+          padding: '8px 10px',
           background: '#f4f6f4',
           borderLeft: '3px solid #2d8a4f',
-          fontSize: 12,
-          color: '#222',
-          minHeight: 32,
+          minHeight: 42,
         }}
       >
-        {loading
-          ? '쿼리 중...'
-          : affordable
-            ? affordable.evidence
-            : '준비 중...'}
+        {loading ? (
+          <div style={{ fontSize: 12, color: '#555' }}>쿼리 중...</div>
+        ) : affordable ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <span style={{ fontSize: 22, fontWeight: 700, color: '#2d8a4f', lineHeight: 1.1 }}>
+                {affordable.dongs.length}
+              </span>
+              <span style={{ fontSize: 12, color: '#444' }}>개 동 통과</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+              {query.mode === 'trade' ? '매매' : '전세'} · {formatMan(query.cashMin)}~{formatMan(query.cashMax)} · {query.size === 'all' ? '전체 평형' : `${query.size}형`}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: '#555' }}>준비 중...</div>
+        )}
       </div>
       <div style={{ marginTop: 4, fontSize: 11, color: '#888' }}>
-        폴리곤 {polygonCount ?? '?'}개 · {affordable?.data_freshness ?? ''}
+        폴리곤 {polygonCount ?? '?'}개
       </div>
 
       <Legend />
-    </div>
+    </>
   );
 }
 
@@ -493,22 +715,43 @@ function CashRangeSlider({
   min,
   max,
   onChange,
+  cashDelta,
 }: {
   min: number;
   max: number;
   onChange: (min: number, max: number) => void;
+  cashDelta: { added: number; removed: number } | null;
 }) {
-  // 슬라이더 드래그 중에는 onChange를 빈번히 부르지 않고 commit 시점에만 부른다.
+  // 실시간 색칠 — cash 필터는 클라 사이드라 network latency 0.
+  // onValueChange 매 호출마다 즉시 onChange → 부모 query 갱신 → useEffect로 즉시 map feature-state 갱신.
   const [draft, setDraft] = useState<[number, number]>([min, max]);
   // 부모(query) 변경에 동기화
   useEffect(() => {
     setDraft([min, max]);
   }, [min, max]);
 
+  function handleValueChange(v: number[]) {
+    const next: [number, number] = [v[0], v[1]];
+    setDraft(next);
+    onChange(next[0], next[1]);
+  }
+
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, color: '#555', marginBottom: 6 }}>
-        자금 범위: <strong>{manToEok(draft[0])} ~ {manToEok(draft[1])}</strong>
+      <div
+        style={{
+          fontSize: 11,
+          color: '#555',
+          marginBottom: 6,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <span>
+          자금 범위: <strong>{formatMan(draft[0])} ~ {formatMan(draft[1])}</strong>
+        </span>
+        <CashDeltaChip delta={cashDelta} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <CashEdgeButton ariaLabel="최소 -10억" edge="min" delta={-100000} draft={draft} setDraft={setDraft} onChange={onChange}>
@@ -527,8 +770,7 @@ function CashRangeSlider({
           max={CASH_MAX}
           step={CASH_STEP}
           minStepsBetweenThumbs={1}
-          onValueChange={(v) => setDraft([v[0], v[1]] as [number, number])}
-          onValueCommit={(v) => onChange(v[0], v[1])}
+          onValueChange={handleValueChange}
           style={{
             position: 'relative',
             display: 'flex',
@@ -593,10 +835,149 @@ function CashRangeSlider({
         </CashEdgeButton>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#999', marginTop: 2 }}>
-        <span>{manToEok(CASH_MIN)}</span>
-        <span>{manToEok(CASH_MAX)}</span>
+        <span>{formatMan(CASH_MIN)}</span>
+        <span>{formatMan(CASH_MAX)}</span>
       </div>
     </div>
+  );
+}
+
+function Footer({
+  dataFreshness,
+}: {
+  dataFreshness: string | null;
+}) {
+  // 페이지 하단 일반 푸터(non-floating). 면책 한 줄 + 데이터/버전 한 줄.
+  // 두 줄 모두 작은 폰트로 가독성 해치지 않게.
+  const version = process.env.NEXT_PUBLIC_APP_VERSION;
+  const sha = process.env.NEXT_PUBLIC_GIT_SHA;
+  const versionLabel = [version && `v${version}`, sha && `#${sha}`].filter(Boolean).join(' ');
+  return (
+    <footer
+      style={{
+        flexShrink: 0,
+        padding: '8px 14px',
+        background: '#fafafa',
+        borderTop: '1px solid #e2e2e2',
+        fontSize: 10.5,
+        lineHeight: 1.55,
+        color: '#444',
+      }}
+    >
+      <div style={{ color: '#777', marginBottom: 2 }}>
+        <span style={{ color: '#a13030', fontWeight: 600 }}>면책:</span>{' '}
+        이 사이트는 임장 후보를 색칠지도로 제시할 뿐, 매매 권유나 투자 자문이 아닙니다.
+        결과는 RTMS 신고분 기준 통계로 단정문이 아닌 후보 제시이며, 실제 거래 판단은 사용자 본인 책임.
+      </div>
+      <div>
+        <span style={{ color: '#777' }}>데이터:</span>{' '}
+        <a
+          href="https://www.data.go.kr/data/15126474/openapi.do"
+          target="_blank"
+          rel="noreferrer noopener"
+          style={{ color: '#2d6da3', textDecoration: 'none' }}
+        >
+          국토교통부 RTMS
+        </a>
+        {' · '}
+        <a
+          href="https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30603"
+          target="_blank"
+          rel="noreferrer noopener"
+          style={{ color: '#2d6da3', textDecoration: 'none' }}
+        >
+          V-World LSMD 법정동
+        </a>
+        {' · '}
+        <span style={{ color: '#777' }}>지도 © Mapbox/OpenStreetMap</span>
+        {dataFreshness && (
+          <span
+            style={{
+              color: '#666',
+              marginLeft: 8,
+              paddingLeft: 8,
+              borderLeft: '1px solid rgba(0,0,0,0.12)',
+            }}
+            title="데이터 최신 업데이트"
+          >
+            {dataFreshness}
+          </span>
+        )}
+        {versionLabel && (
+          <span
+            style={{
+              color: '#888',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: 9.5,
+              marginLeft: 8,
+              paddingLeft: 8,
+              borderLeft: '1px solid rgba(0,0,0,0.12)',
+            }}
+            title="앱 버전 / git commit"
+          >
+            {versionLabel}
+          </span>
+        )}
+      </div>
+    </footer>
+  );
+}
+
+function CashDeltaChip({
+  delta,
+}: {
+  delta: { added: number; removed: number } | null;
+}) {
+  // delta가 null이면 자리만 차지하지 않도록 빈 fragment.
+  // 1.8s 후 부모가 null로 바꿔 자연 fade-out — CSS opacity transition으로 부드럽게.
+  const visible = delta !== null && (delta.added > 0 || delta.removed > 0);
+  return (
+    <span
+      aria-live="polite"
+      aria-hidden={!visible}
+      style={{
+        display: 'inline-flex',
+        gap: 4,
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 220ms ease-out',
+        pointerEvents: 'none',
+      }}
+    >
+      {delta && delta.added > 0 && (
+        <span
+          style={{
+            background: '#e6f4e8',
+            color: '#1f6e3a',
+            border: '1px solid #b6dcc1',
+            padding: '1px 7px',
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 700,
+            lineHeight: 1.4,
+          }}
+          title={`방금 추가된 동 ${delta.added}개`}
+        >
+          +{delta.added}
+        </span>
+      )}
+      {delta && delta.removed > 0 && (
+        <span
+          style={{
+            background: '#fbeaea',
+            color: '#a13030',
+            border: '1px solid #eebebe',
+            padding: '1px 7px',
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 700,
+            lineHeight: 1.4,
+          }}
+          title={`방금 빠진 동 ${delta.removed}개`}
+        >
+          −{delta.removed}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -694,6 +1075,7 @@ function SidePanel({
   details,
   loading,
   mode,
+  size,
   onClose,
 }: {
   bjdCode: string;
@@ -701,6 +1083,7 @@ function SidePanel({
   details: DongDetailsResponse | null;
   loading: boolean;
   mode: QueryMode;
+  size: SizeOption;
   onClose: () => void;
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
@@ -761,6 +1144,10 @@ function SidePanel({
             {dong.build_year_stddev != null && dong.build_year_stddev > 10 && ' ⚠️ 신구축 혼재'}
           </div>
         </div>
+      )}
+
+      {details && details.distributions.length > 0 && (
+        <DistributionChart distributions={details.distributions} mode={mode} size={size} />
       )}
 
       <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>
@@ -824,6 +1211,131 @@ function SidePanel({
         </div>
       )}
     </aside>
+  );
+}
+
+// 박스플롯: 매매·전세를 같은 가로축으로 비교. size='all'이면 매칭되는 가장 거래수 많은 버킷 사용.
+function DistributionChart({
+  distributions,
+  mode,
+  size,
+}: {
+  distributions: DongDistribution[];
+  mode: QueryMode;
+  size: SizeOption;
+}) {
+  function pickFor(m: 'TRADE' | 'JEONSE'): DongDistribution | null {
+    const candidates = distributions.filter((d) => d.mode === m);
+    if (candidates.length === 0) return null;
+    if (size === 'all') {
+      // 표본이 가장 많은 버킷 선택
+      return candidates.reduce((a, b) => (a.tx_count_3m >= b.tx_count_3m ? a : b));
+    }
+    return candidates.find((d) => d.size_bucket === size) ?? null;
+  }
+
+  const trade = pickFor('TRADE');
+  const jeonse = pickFor('JEONSE');
+  const series: Array<{ label: string; color: string; row: DongDistribution; primary: boolean }> = [];
+  if (trade) series.push({ label: '매매', color: '#2d8a4f', row: trade, primary: mode === 'trade' });
+  if (jeonse) series.push({ label: '전세', color: '#5577c8', row: jeonse, primary: mode === 'jeonse' });
+
+  if (series.length === 0) return null;
+
+  const usable = series.filter((s) => s.row.p25_man != null && s.row.p75_man != null);
+  if (usable.length === 0) {
+    return (
+      <div style={{ marginTop: 12, padding: '6px 8px', fontSize: 11, color: '#888', background: '#fafafa', borderRadius: 4 }}>
+        분포 차트: 표본 부족 (p25/p75 산출 불가)
+      </div>
+    );
+  }
+
+  // 공통 x축 범위: 모든 시리즈의 p25~p75를 포함, 양쪽 5% 패딩
+  const lo = Math.min(...usable.map((s) => s.row.p25_man as number));
+  const hi = Math.max(...usable.map((s) => s.row.p75_man as number));
+  const span = Math.max(hi - lo, 1);
+  const pad = span * 0.05;
+  const xMin = lo - pad;
+  const xMax = hi + pad;
+  const xRange = xMax - xMin;
+
+  const W = 320;
+  const H = 28; // per row
+  const PAD_L = 36;
+  const PAD_R = 8;
+  const innerW = W - PAD_L - PAD_R;
+  function x(v: number) {
+    return PAD_L + ((v - xMin) / xRange) * innerW;
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+        가격 분포 (p25 · 중위 · p75)
+        <span style={{ fontSize: 10, color: '#888', fontWeight: 400, marginLeft: 6 }}>
+          {size === 'all' ? '최대 표본 버킷' : `${size}형`}
+        </span>
+      </div>
+      <svg
+        width={W}
+        height={H * series.length + 18}
+        viewBox={`0 0 ${W} ${H * series.length + 18}`}
+        role="img"
+        aria-label="가격 분포 박스플롯"
+        style={{ display: 'block', maxWidth: '100%' }}
+      >
+        {series.map((s, i) => {
+          const cy = i * H + H / 2;
+          const r = s.row;
+          if (r.p25_man == null || r.p75_man == null || r.median_man == null) {
+            return (
+              <g key={s.label}>
+                <text x={4} y={cy + 4} fontSize="11" fill={s.color} fontWeight={s.primary ? 700 : 400}>
+                  {s.label}
+                </text>
+                <text x={PAD_L} y={cy + 4} fontSize="10" fill="#999">
+                  표본 부족 ({r.tx_count_3m}건)
+                </text>
+              </g>
+            );
+          }
+          const x25 = x(r.p25_man);
+          const x50 = x(r.median_man);
+          const x75 = x(r.p75_man);
+          return (
+            <g key={s.label} opacity={s.primary ? 1 : 0.55}>
+              <text x={4} y={cy + 4} fontSize="11" fill={s.color} fontWeight={s.primary ? 700 : 400}>
+                {s.label}
+              </text>
+              {/* IQR box */}
+              <rect
+                x={x25}
+                y={cy - 7}
+                width={Math.max(x75 - x25, 1)}
+                height={14}
+                fill={s.color}
+                fillOpacity={0.18}
+                stroke={s.color}
+                strokeWidth={1}
+              />
+              {/* median */}
+              <line x1={x50} x2={x50} y1={cy - 8} y2={cy + 8} stroke={s.color} strokeWidth={2} />
+              {/* p25 / p75 numeric labels */}
+              <text x={x25} y={cy - 10} fontSize="9" fill="#666" textAnchor="middle">
+                {(r.p25_man / 10000).toFixed(1)}
+              </text>
+              <text x={x75} y={cy - 10} fontSize="9" fill="#666" textAnchor="middle">
+                {(r.p75_man / 10000).toFixed(1)}
+              </text>
+              <text x={x50} y={cy + 18} fontSize="9" fill={s.color} textAnchor="middle" fontWeight={600}>
+                {(r.median_man / 10000).toFixed(1)}억 · {r.tx_count_3m}건
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 

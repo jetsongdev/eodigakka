@@ -11,10 +11,10 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
-- [ ] 슬라이더 드래그 중 비동기 색칠 — debounce 150ms + AbortController, 또는 클라 사이드 캐싱 (line 72~76)
-- [ ] 사이드패널 분포 차트 + 매매·전세 동시 비교 (line 77~88)
-- [ ] 모바일 범례 분리 + 컨트롤 collapsible (line 89~94)
-- [ ] 트리거: 데스크톱 사용자 fb·실사용 시 즉시 — 작은 patch들로 분리 가능
+- [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
+- [x] 사이드패널 분포 차트 + 매매·전세 동시 비교 — `/api/dong/.../complexes` `distributions[]` + SVG 박스플롯 (2026-05-05)
+- [x] 모바일 컨트롤 collapsible — `(max-width: 640px)` 기본 접힘 + 1줄 요약 + 토글 (2026-05-05)
+- [ ] 잔여: SidePanel 모바일 bottom sheet, 모바일 범례 floating chip, 슬라이더 햅틱 피드백
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
@@ -103,29 +103,18 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [x] 마우스오버 tooltip (동 이름 + 중위 + tx_count + confidence + 미통과 안내)
 - [x] 클릭 → 사이드패널 (Evidence + 모드별 TOP5 단지 + 최근 거래 10건 표 + 신구축 혼재 ⚠️)
 - [x] cash 슬라이더 (radix-slider) + 카세트 한 줄 컨트롤 + max 30억 확장 (snapshot 04)
-- [ ] **슬라이더 드래그 중 비동기 색칠** — 현재는 onValueCommit(드래그 종료)에서만 fetch. UX 개선:
-  - onValueChange(드래그 중)에 fetch debounce(150ms 정도) 적용
-  - in-flight 요청 cancel (AbortController)
-  - 또는 클라이언트 사이드 캐싱 (mode×size별 mv_dong_stats 한 번 다 받아두고 cash 필터만 client에서)
-  - 후자가 네트워크 효율 압도적 (한 번 fetch → 클라 필터). API에 `/api/dong-stats?mode&size`(전체 동) 추가 검토
-- [ ] **사이드패널 UI 개선** — 동 폴리곤 클릭 시 뜨는 패널의 정보 위계·시각화 강화 (snapshot 03 baseline)
-  - **시각 위계**: 중위 가격을 가장 큰 숫자로 노출, Evidence는 보조 텍스트. confidence·연식 칩 형태(태그)로 분리
-  - **분포 차트**: 동 내 거래가 분포 (히스토그램 또는 박스플롯) — p25/p50/p75 한눈에. svg 직접 또는 `recharts`/`visx` 검토
-  - **평형 분포**: area_m2 히스토그램 (이 동에 어떤 평형이 많은지)
-  - **매매·전세 동시 비교**: 한 동에서 매매·전세 mini-card 두 개 (전세가율 % 강조)
-  - **단지 카드 강화**: TOP5 단지에 미니 sparkline(최근 1년 거래 추이) + 평형/연식 라벨
-  - **액션 버튼**: 
-    - "Claude로 더 보기" — real-estate-mcp 자연어 쿼리 클립보드 복사 (`내가 살펴본 [동이름] 평형 [size] 매물 자세히 알려줘`)
-    - "RTMS에서 보기" — data.go.kr 외부 링크
-    - "임장 후보 ⭐" — localStorage에 저장 (즐겨찾기, 후속 임장 List 기능)
-  - **모바일 UX**: 우측 360px 고정 → bottom sheet (drawer) 패턴, 헤더 swipe-down으로 닫기
-  - **권장 우선순위**: 분포 차트 → 매매·전세 동시 비교 → 액션 버튼 → 모바일 sheet → 평형 분포
-- [ ] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — snapshot 05 모바일 캡처에서 컨트롤 패널이 화면 절반 가까이 차지해 지도 시야 가림. 개선 옵션:
-  - (A) 모바일에서만 범례를 별도 시트(하단 풀러블 sheet 또는 floating chip)로 분리
-  - (B) 컨트롤 패널을 collapsible — 기본은 접힌 상태(요약 한 줄), 탭하면 펼침
-  - (C) 슬라이더+범례를 가로 스와이프 페이지(컨트롤 / 범례 2단)로
-  - 권장: B + A 조합 — 컨트롤은 collapsible 헤더, 범례는 우하단 floating chip(탭하면 팝업)
-  - 검증: 다음 mobile snapshot에서 지도 viewport 점유율 > 60% 확인
+- [x] **슬라이더 드래그 중 비동기 색칠** (2026-05-05) — 1차: 150ms debounce + AbortController. 2차: 클라 사이드 cash 필터로 전환 (mode/size별 1회 fetch, cash는 메모리 필터). 슬라이더 25ms × 20회 이동 동안 fetch 0회 — 진짜 실시간.
+- [~] **사이드패널 UI 개선** — 분포 차트만 1차 처리 완료, 나머지 항목은 후속 (2026-05-05)
+  - [x] **분포 차트**: SVG 박스플롯 — `mv_dong_stats`의 p25/p50/p75 + 매매·전세 동시 (현재 모드 100%, 비교 모드 55% 투명)
+  - [x] **매매·전세 동시 비교**: 분포 차트 안에 흡수 — 별도 mini-card는 만들지 않음
+  - [ ] **시각 위계**: 중위 가격을 가장 큰 숫자로 노출, confidence·연식 칩 형태로 분리
+  - [ ] **평형 분포**: area_m2 히스토그램
+  - [ ] **단지 카드 강화**: TOP5에 미니 sparkline + 평형/연식 라벨
+  - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
+  - [ ] **모바일 UX**: bottom sheet (drawer) 패턴, swipe-down 닫기
+- [~] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — 컨트롤 collapsible만 1차 처리 완료 (2026-05-05)
+  - [x] (B) 컨트롤 패널 collapsible — 기본 접힘 + 1줄 요약 + 토글, 사용자 토글 후 자동 동기화 stop. 모바일 뷰에서 지도 점유율 90% 이상 확보
+  - [ ] (A) 범례 floating chip — 별도 시트 분리는 후속
 - [ ] **슬라이더 / 카세트 버튼 햅틱 피드백** — 모바일 PWA에서 슬라이더 핸들 step 변경 시·카세트 버튼 클릭 시 진동
   - Web Vibration API (`navigator.vibrate(10)`)는 Android Chrome만 지원, iOS Safari 차단 — 모바일 한정 / 미지원 환경 graceful degradation
   - 단계: ±1천만 = 짧은 진동(8ms), ±1억 = 중간(15ms), ±10억 = 긴 진동(30ms)

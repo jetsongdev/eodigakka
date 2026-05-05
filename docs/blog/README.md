@@ -21,6 +21,10 @@ tags: [postgres, neon, devops]
 
 - TIL과 cross-reference: 본문 끝 "참고" 섹션에 원본 TIL 링크.
 
+## 단편
+
+- 2026-05-05 — [\"Failed to initialize WebGL\" 한 줄에 숨은 원인 셋](./2026-05-05-mapbox-webgl-failure-modes.md) — mapbox + React StrictMode/HMR + Chrome GPU process 실패 진단기 (TIL `2026-05-05-mapbox-webgl-strictmode`)
+
 ## 시리즈 인덱스
 
 ### 2026-05-05 — `~/Documents`에서 ETL 자동화하다 함정 6개 만난 이야기 (Neon 마이그레이션)
