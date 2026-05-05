@@ -10,6 +10,20 @@
 
 ---
 
+## [Unreleased] - 모바일 SidePanel bottom sheet
+
+좁은 화면(`max-width: 640px`)에서 동 상세 패널을 우측 사이드 패널 대신 하단 시트로 슬라이드업. 기존 `position: absolute; right: 60; width: 360`은 375px 폰에서 화면을 거의 가로로 다 차지해 가독성·터치 타겟이 좁았다. 백드롭 탭으로 닫기 + 기존 × 버튼 + 상단 드래그 핸들 시각 affordance만 추가, 스와이프 제스처는 의존성 회피 차원에서 제외. 데스크톱 레이아웃은 그대로.
+
+### 추가
+- `useIsNarrow` 훅 — `matchMedia('(max-width: 640px)')` 구독, `useIsHoverCapable`과 동일 패턴
+- 모바일 백드롭 — 탭 시 닫기, `rgba(0,0,0,0.3)` overlay
+- 드래그 핸들 시각 bar (실제 제스처 미연결, 시트 affordance 힌트)
+
+### 변경
+- `web/app/page.tsx` `SidePanel` — `isNarrow` 분기로 레이아웃 스위칭, `role="dialog"` + `aria-label` 부여, 닫기 버튼 터치 타겟 확대(padding 4/8, fontSize 22)
+
+---
+
 ## [v0.5.4] - 2026-05-05 - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
 
 PR #6(v0.5.3) merge 직전 19분째 Queued 상태에서 발견된 운영 함정. Vercel Hobby plan은 account-wide 동시 빌드 1개라 같은 account의 다른 프로젝트(junggu-trash-map 등) stuck이 우리 빌드까지 막는다. dispatcher phantom hold 상태가 되면 visible한 in-progress 빌드가 없어도 새 enqueue가 진행 안 됨. 진단 + 복구 절차(All Projects 뷰 → 가장 오래된 phantom suspect cancel → 1~2분 관찰)를 TIL + 블로그 단편으로 박음.

@@ -20,7 +20,8 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] 사이드패널 분포 차트 + 매매·전세 동시 비교 — `/api/dong/.../complexes` `distributions[]` + SVG 박스플롯 (2026-05-05)
 - [x] 모바일 컨트롤 collapsible — `(max-width: 640px)` 기본 접힘 + 1줄 요약 + 토글 (2026-05-05)
 - [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
-- [ ] 잔여: SidePanel 모바일 bottom sheet, 모바일 범례 floating chip, 슬라이더 햅틱 피드백
+- [x] **SidePanel 모바일 bottom sheet** (2026-05-05) — `useIsNarrow` 훅 + isNarrow 분기로 `position: fixed; bottom: 0; max-height: 80vh`, 백드롭 탭으로 닫기, 드래그 핸들 시각 affordance 추가. 스와이프 제스처는 의존성 회피로 제외
+- [ ] 잔여: 모바일 범례 floating chip, 슬라이더 햅틱 피드백
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
