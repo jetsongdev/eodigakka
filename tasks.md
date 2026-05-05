@@ -10,10 +10,10 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (인프라 정착 직후)**:
-1. 🟡 **Mapbox 토큰 도메인 화이트리스트** (E 섹션, 보안, 5분) — 토큰 noise 작지만 비용 작아 즉시 추천
-2. 🟢 **Healthchecks.io ping** (B 섹션, 운영, 10분) — 다음 cron firing(2026-05-06 03:00 KST) 전에 박아두면 즉시 효력
-3. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
+**현재 우선순위 추천 (Mapbox 토큰 + Healthchecks ping 완료 직후)**:
+1. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
+2. ⚪ **GitHub 시크릿 ↔ Vercel env 일관성 점검** (F 섹션) — Neon 비번 회전 시 동기화 함정 미리 방지
+3. 🔵 **모바일 UX 잔여** (A 섹션) — SidePanel bottom sheet, 범례 floating chip, 햅틱
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -25,7 +25,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
-- [ ] Healthchecks.io ping — workflow 마지막 step에 `curl -fsS https://hc-ping.com/<UUID>` 한 줄 (line 143)
+- [x] Healthchecks.io ping (2026-05-05) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 (값 없으면 스킵하고 빌드 계속). secret 등록 후 다음 cron firing(2026-05-06 03:00 KST)부터 즉시 효력.
 - [ ] cron firing 지연 알림 — `last_succeeded_at`가 KST 03:00 + 1h 지나도 갱신 안 되면 GH issue 자동 생성
 - [ ] 트리거: 다음 cron firing(2026-05-06 03:00 KST) 통과 + 1주일 안정 운영 확인 후
 
@@ -54,7 +54,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [ ] 트리거: Phase 1 임장 1회 + 강북 14구 후보 부족 판단
 
 ### 비-차단 정리 (편한 시점에)
-- [ ] `etl/run_etl.sh` — launchd 폐기됐으니 사용 의도 재정의 또는 삭제 검토
+- [x] `etl/run_etl.sh` 폐기 (2026-05-05) — launchd 폐기 + GHA가 inline 명령으로 대체. live consumer 없음 확인 후 삭제. historical 언급(CHANGELOG·TIL·blog)은 의도적으로 유지.
 - [ ] `db/migrate_to_neon.sh` — 1회성 스크립트지만 Neon 재마이그레이션 시 재사용 가능. README에 "초기화 절차" 섹션으로 보존 명시
 - [ ] CLAUDE.md 표 갱신 — local docker postgres 명령어가 여전히 유효한지 (web dev에는 OK, ETL은 Neon 직결로 전환)
 
@@ -239,7 +239,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시점에 도입 검토.
 
 - [ ] **Neon free plan 0.5GB 한도 모니터링** — `pg_database_size('neondb')` 주간 query. 80% (≈400MB) 도달 시 alert + plan 업그레이드 또는 raw 테이블 TTL 검토. 현재 dump 7MB라 여유 큼이지만 서울 25구·12개월 누적 시 빨리 차오를 수 있음
-- [ ] **Healthchecks.io ping** — `run_etl.sh` 끝(또는 GHA workflow 마지막 step)에 `curl -fsS -m 10 --retry 3 https://hc-ping.com/<UUID>` 한 줄. 새벽 03:00에 안 돌면 이메일/Telegram 알림. 무료 tier 충분.
+- [x] **Healthchecks.io ping** (2026-05-05 완료) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴. 새벽 03:00에 안 돌면 healthchecks.io에서 이메일/Telegram 알림. 무료 tier.
 - [ ] **cron firing 지연 알림** — GHA scheduler가 부하로 1~2시간 늦어질 수 있음. `last_succeeded_at`가 예상 firing 후 +1h 지나도 갱신 안 되면 GH issue 자동 생성하는 별도 cron 작성
 - [ ] **/api/health 외부 ping** — Uptime Kuma 셀프호스트 또는 Healthchecks.io의 HTTP check로 5분마다 ping
 - [ ] (확장 시) **Grafana Cloud 무료 tier** — agent로 logs 송신, ETL 트렌드 시계열 시각화

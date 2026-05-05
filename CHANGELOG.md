@@ -24,6 +24,27 @@
 
 ---
 
+## [v0.5.5] - 2026-05-05 - Healthchecks.io ping + run_etl.sh 폐기
+
+GHA cron이 미발사·실패하는 경우 자가 인지가 늦어 데이터 1~2일 비는 사고 위험을 막기 위해 `etl.yml`에 healthchecks.io 3-step ping(start / success / fail) 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 — 값이 없으면 ping 안 보내고 워크플로 계속 진행, 등록 후 다음 firing부터 즉시 효력. 새벽 03:00 KST에 안 돌면 healthchecks.io에서 이메일/Telegram 알림.
+
+부수 정리로 `etl/run_etl.sh` 삭제 — launchd 폐기 + GHA가 inline 명령으로 대체한 뒤로 live consumer 없음. CHANGELOG·blog·TIL의 historical 언급은 의도적으로 유지.
+
+### 결정
+- ADR-010: 외부 watchdog로 healthchecks.io 무료 tier 도입. GHA 자체 모니터링은 scheduler 미발사 케이스를 못 잡아 sufficient하지 않다는 판단. 향후 `/api/health` HTTP check 등 같은 패턴으로 확장 가능.
+
+### 추가
+- `.github/workflows/etl.yml` — healthchecks.io start/success/fail ping 3-step. env hoist로 secret 안전 주입(GHA shell injection 방지 패턴 재사용).
+- `SPEC.md` ADR-010 — 결정 근거·trade-off·영향 기록.
+
+### 변경
+- `tasks.md` — Healthchecks.io ping + run_etl.sh 폐기 항목 [x] 처리, 우선순위 추천 갱신.
+
+### 제거
+- `etl/run_etl.sh` — launchd/cron용 wrapper. live consumer 없음.
+
+---
+
 ## [v0.5.4] - 2026-05-05 - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
 
 PR #6(v0.5.3) merge 직전 19분째 Queued 상태에서 발견된 운영 함정. Vercel Hobby plan은 account-wide 동시 빌드 1개라 같은 account의 다른 프로젝트(junggu-trash-map 등) stuck이 우리 빌드까지 막는다. dispatcher phantom hold 상태가 되면 visible한 in-progress 빌드가 없어도 새 enqueue가 진행 안 됨. 진단 + 복구 절차(All Projects 뷰 → 가장 오래된 phantom suspect cancel → 1~2분 관찰)를 TIL + 블로그 단편으로 박음.
