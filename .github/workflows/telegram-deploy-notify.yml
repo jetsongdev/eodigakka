@@ -1,0 +1,180 @@
+name: Telegram deploy notify
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+  pull-requests: read
+  deployments: read
+
+jobs:
+  notify:
+    if: |
+      github.event.deployment_status.state == 'success' ||
+      github.event.deployment_status.state == 'failure' ||
+      github.event.deployment_status.state == 'error'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Look up PR for deployed SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.deployment.sha }}
+        run: |
+          set -euo pipefail
+          PR_JSON=$(gh api "/repos/$REPO/commits/$SHA/pulls" 2>/dev/null || echo "[]")
+          # 에러 응답이 object로 오면 빈 배열로 처리
+          if echo "$PR_JSON" | jq -e 'type != "array"' >/dev/null 2>&1; then
+            PR_JSON="[]"
+          fi
+          echo "number=$(echo "$PR_JSON"   | jq -r '.[0].number   // empty')" >> "$GITHUB_OUTPUT"
+          echo "url=$(echo "$PR_JSON"      | jq -r '.[0].html_url // empty')" >> "$GITHUB_OUTPUT"
+          echo "title=$(echo "$PR_JSON"    | jq -r '.[0].title    // empty')" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$(echo "$PR_JSON" | jq -r '.[0].head.ref // empty')" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repo at deployed SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+          fetch-depth: 1
+
+      - name: Extract & format CHANGELOG [Unreleased]
+        id: cl
+        run: |
+          set -euo pipefail
+          [ -f CHANGELOG.md ] || { echo "content=" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          UNREL=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md | sed '/./,$!d')
+          [ -z "$UNREL" ] && { echo "content=" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          # HTML escape (& < > 만)
+          ESC=$(printf '%s' "$UNREL" | python3 -c 'import sys,html; print(html.escape(sys.stdin.read()), end="")')
+
+          # ### Header → <b>Header</b>, "- " → "• "
+          FMT=$(printf '%s' "$ESC" | sed -E 's@^### (.+)$@<b>\1</b>@; s@^- @• @')
+
+          # 줄 단위 truncate
+          MAX=20
+          TOTAL=$(printf '%s\n' "$FMT" | wc -l | tr -d ' ')
+          if [ "$TOTAL" -gt "$MAX" ]; then
+            BODY=$(printf '%s\n' "$FMT" | head -n "$MAX")
+            BODY="${BODY}"$'\n'"<i>…and $((TOTAL - MAX)) more lines</i>"
+          else
+            BODY="$FMT"
+          fi
+
+          {
+            echo "content<<EOF_CL"
+            printf '%s\n' "$BODY"
+            echo "EOF_CL"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send to Telegram
+        env:
+          TG_BOT_TOKEN:     ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID:       ${{ secrets.TG_CHAT_ID }}
+          TG_TOPIC_PREVIEW: ${{ vars.TG_TOPIC_PREVIEW }}
+          TG_TOPIC_PROD:    ${{ vars.TG_TOPIC_PROD }}
+          TG_TOPIC_ERROR:   ${{ vars.TG_TOPIC_ERROR }}
+          DEPLOY_URL:       ${{ github.event.deployment_status.target_url }}
+          ENVIRONMENT:      ${{ github.event.deployment.environment }}
+          STATE:            ${{ github.event.deployment_status.state }}
+          REF:              ${{ github.event.deployment.ref }}
+          SHA:              ${{ github.event.deployment.sha }}
+          REPO:             ${{ github.repository }}
+          PR_NUMBER:        ${{ steps.pr.outputs.number }}
+          PR_URL:           ${{ steps.pr.outputs.url }}
+          PR_TITLE:         ${{ steps.pr.outputs.title }}
+          PR_HEAD_REF:      ${{ steps.pr.outputs.head_ref }}
+          CHANGELOG:        ${{ steps.cl.outputs.content }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
+            echo "::warning::TG_BOT_TOKEN or TG_CHAT_ID missing"; exit 0
+          fi
+
+          # 토픽 + 라벨/이모지/태그 라우팅
+          if [ "$STATE" = "failure" ] || [ "$STATE" = "error" ]; then
+            TOPIC="$TG_TOPIC_ERROR"
+            ENV_TAG="error"
+            ENV_EMOJI="❌"
+            ENV_LABEL="Deploy ${STATE}"
+          elif [ "$ENVIRONMENT" = "Production" ]; then
+            TOPIC="$TG_TOPIC_PROD"
+            ENV_TAG="production"
+            ENV_EMOJI="🎯"
+            ENV_LABEL="Production deploy"
+          else
+            TOPIC="$TG_TOPIC_PREVIEW"
+            ENV_TAG="preview"
+            ENV_EMOJI="🚀"
+            ENV_LABEL="Preview deploy"
+          fi
+
+          SHORT_SHA=$(echo "$SHA" | cut -c1-7)
+          PROJECT=$(echo "$REPO" | cut -d/ -f2)
+          PROJECT_TAG=$(echo "$PROJECT" | tr '-' '_')
+
+          # 진짜 브랜치명: PR head.ref 우선, 없으면 deployment.ref, SHA처럼 보이면 비움
+          DISPLAY_REF="${PR_HEAD_REF:-$REF}"
+          if echo "$DISPLAY_REF" | grep -qE '^[0-9a-f]{40}$'; then
+            DISPLAY_REF=""
+          fi
+
+          # 해시태그
+          TAGS="#${PROJECT_TAG} #${ENV_TAG}"
+          [ -n "$PR_NUMBER" ] && TAGS="$TAGS #PR${PR_NUMBER}"
+
+          # HTML escape helper
+          esc() { printf '%s' "$1" | python3 -c 'import sys,html; print(html.escape(sys.stdin.read()), end="")'; }
+
+          PROJECT_E=$(esc "$PROJECT")
+          PR_TITLE_E=$(esc "$PR_TITLE")
+          REF_E=$(esc "$DISPLAY_REF")
+
+          # 본문
+          MSG="$TAGS"$'\n\n'"$ENV_EMOJI <b>$PROJECT_E</b> — $ENV_LABEL"
+          if [ -n "$PR_TITLE_E" ]; then
+            MSG="$MSG"$'\n'"└ <i>$PR_TITLE_E</i>"
+          fi
+          if [ -n "$REF_E" ]; then
+            MSG="$MSG"$'\n'"└ <code>$REF_E</code> · <code>$SHORT_SHA</code>"
+          else
+            MSG="$MSG"$'\n'"└ <code>$SHORT_SHA</code>"
+          fi
+          if [ -n "$CHANGELOG" ]; then
+            MSG="$MSG"$'\n\n'"📋 <b>[Unreleased]</b>"$'\n'"$CHANGELOG"
+          fi
+
+          # inline keyboard (한 줄에 최대 3버튼) — DEPLOY_URL 비어있으면 Open 생략
+          ROW="[]"
+          if [ -n "$DEPLOY_URL" ]; then
+            ROW=$(jq -nc --arg u "$DEPLOY_URL" '[{text:"🌐 Open", url:$u}]')
+          fi
+          ROW=$(echo "$ROW" | jq -c --arg c "https://github.com/$REPO/commit/$SHA" \
+                '. + [{text:"📝 Commit", url:$c}]')
+          if [ -n "$PR_URL" ]; then
+            ROW=$(echo "$ROW" | jq -c --arg u "$PR_URL" --arg n "$PR_NUMBER" \
+                  '. + [{text:("🔀 PR #" + $n), url:$u}]')
+          fi
+          KBD=$(echo "$ROW" | jq -c '[.]')
+
+          # payload — message_thread_id는 TOPIC 값 있을 때만 (빈 값/"0" → General fallback)
+          PAYLOAD=$(jq -nc \
+            --arg c "$TG_CHAT_ID" \
+            --arg t "$MSG" \
+            --argjson k "$KBD" \
+            --arg topic "$TOPIC" \
+            '{chat_id:$c, text:$t, parse_mode:"HTML",
+              disable_web_page_preview:true,
+              reply_markup:{inline_keyboard:$k}}
+             + (if $topic != "" and $topic != "0"
+                then {message_thread_id:($topic|tonumber)}
+                else {} end)')
+
+          curl -fsS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H 'Content-Type: application/json' --data-binary "$PAYLOAD" > /dev/null
+
+          echo "✓ sent $ENV_LABEL → chat $TG_CHAT_ID, topic ${TOPIC:-General}"
