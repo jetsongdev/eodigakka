@@ -68,11 +68,10 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] Root Directory를 `web`으로 변경 (Vercel dashboard → Settings → Build and Deployment, 2026-05-05)
 - [x] 환경변수 Production + Preview 등록 완료 (2026-05-05): `DATABASE_URL`, `NEXT_PUBLIC_MAPBOX_TOKEN`
 - [ ] (선택) Development 환경에도 추가 — `vercel dev` / `vercel env pull` 사용 시 필요. 현재 로컬은 `web/.env.local` 직접 관리라 비필수
-- [ ] **Mapbox 토큰 도메인 화이트리스트** (즉시 — 보안) — `https://account.mapbox.com/access-tokens/` 해당 토큰 → URL restrictions:
-  - `http://localhost:*`
-  - `https://eodigakka.vercel.app`
-  - `https://*.vercel.app` (preview 빌드용)
-  - `https://*-jetsongdev.vercel.app` (직접 URL 패턴)
+- [x] **Mapbox 토큰 도메인 화이트리스트** (2026-05-05) — Mapbox URL restriction이 wildcard 미지원이라 환경별 토큰 분리:
+  - `eodigakka-prod` 신규 발급(restriction `https://eodigakka.vercel.app`만) → Vercel Production env
+  - 기존 default token(unrestricted) → Vercel Preview env + 로컬 `.env.local`
+  - Production redeploy(캐시 해제) 후 지도 작동 검증 완료. (TIL `2026-05-05-mapbox-token-url-restriction`)
 - [x] 첫 production deploy 완료 (2026-05-05, sha 20353d3, 24s build) — `https://eodigakka.vercel.app`
 - [x] 자동화 라인 검증 완료 — Push → Vercel build → GitHub Deployments → GHA workflow (run 25368302505, 21s) → Telegram 🎯 Production 토픽
 - [x] API 검증 — `/api/health` (trade 5748·rent 15295), `/api/polygons` (467개), `/api/affordable` (26개 동, freshness RTMS 2026-05-04)
