@@ -4,6 +4,31 @@
 
 ---
 
+## [2026-05-05] Vercel 배포 셋업 + Telegram 자동 알림 + 배포 워크플로 정책
+
+`jetsongdev/eodigakka` Vercel 프로젝트 생성·연결, GitHub Deployments → GHA → Telegram 3토픽 분기 알림 자동화, main branch protection 적용으로 PR 강제 흐름 박음. 첫 production deploy 통과 (sha `4c2b288`, https://eodigakka.vercel.app).
+
+### 추가
+- `web/.vercel/project.json` → `.vercel/project.json` (repo root)으로 이동, Vercel project root directory를 `web`으로 설정. monorepo 패턴.
+- `.gitignore`에 `.vercel/`, `test-results/` 추가
+- `.github/workflows/telegram-deploy-notify.yml` (이전 commit) — `deployment_status` 이벤트로 Preview/Production/Errors 토픽 분기. CHANGELOG `[Unreleased]` 본문 동봉, 인라인 버튼 (Open/Commit/PR).
+- Telegram secrets/variables 등록: `TG_BOT_TOKEN`, `TG_CHAT_ID`, `TG_TOPIC_PREVIEW=2`, `TG_TOPIC_PROD=3`, `TG_TOPIC_ERROR=15`
+- Vercel env: `DATABASE_URL`, `NEXT_PUBLIC_MAPBOX_TOKEN` (Production + Preview)
+
+### 변경
+- `next.config.js` (web) — `NEXT_PUBLIC_APP_VERSION` (package.json) + `NEXT_PUBLIC_GIT_SHA` (`git rev-parse --short HEAD`) 빌드 타임 inject. 푸터에 `v0.1.0 #<sha>` 자동 표기 → 배포 시점 재현 가능성 확보.
+- 로딩 오버레이 UI (web/app/page.tsx) — 첫 페이지 진입 시 `polygonCount + affordable` 둘 다 도착할 때까지 반투명 spinner + 단계별 텍스트 (`서울 467개 법정동 경계 로드 중...` → `동별 거래 데이터 분석 중...`). `pointerEvents: none`으로 mapbox 인터랙션 방해 안 함.
+- e2e `map.spec.ts` — `폴리곤` / `eodigakka` strict-mode 충돌 회피 위해 LoadingOverlay 텍스트 분리 (`경계` 사용).
+
+### 결정
+- **main 직접 push 금지 정책** (CLAUDE.md `## 배포 워크플로` 신설) — feature branch → push (Vercel Preview 자동) → PR 자가 머지 → main Production. 예외: 문서만 변경, `.github/workflows/`, 명시 핫픽스.
+- **GitHub branch protection** 적용 — `required_pull_request_reviews: 0`, `enforce_admins: false`(admin 우회 허용), `allow_force_pushes/allow_deletions: false`. 솔로 dev에 적합한 가벼운 강제.
+- `.vercel/`은 repo root에 두고 root directory만 dashboard에서 `web` 지정 — monorepo 표준. `vercel link`를 web/에서 직접 하면 cwd 충돌 (`web/web` not found)이 일어남.
+- CLI deploy(`vercel --prod`)는 GitHub Deployments 이벤트 발사 안 함 — telegram 워크플로 트리거하려면 git push trigger 사용.
+- Mapbox 토큰은 `NEXT_PUBLIC_` prefix가 의도된 설계 (브라우저 → mapbox.com 직접 호출). 노출은 정상이고 보안은 mapbox 대시보드 URL 화이트리스트로 처리. 잔여 작업으로 분리.
+
+---
+
 ## [2026-05-05] UX 마무리 라운드 — 슬라이더 비동기 색칠 + 사이드패널 분포 차트 + 모바일 collapsible
 
 `tasks.md` A. UX 마무리 갈래 3건 동시 처리. 슬라이더는 드래그 종료(`onValueCommit`)에서만 색칠하던 것을 드래그 중(`onValueChange`) 150ms debounce로 비동기 갱신, in-flight `/api/affordable` fetch는 `AbortController.abort()`로 cancel해 race를 막았다. 사이드패널은 `mv_dong_stats`의 `p25/median/p75`를 `/api/dong/[bjd]/complexes` 응답에 `distributions[]`로 노출하고 SVG 박스플롯으로 매매·전세 양쪽을 같은 가로축에 그렸다(현재 모드는 100%, 비교 모드는 55% 투명). 모바일(`max-width: 640px`)에서는 ControlPanel을 기본 접힘 상태로 시작하고 1줄 요약(`27개 동 · 매매 · 4억~8억 · M형`)만 노출, 사용자 토글 후에는 자동 동기화를 멈춰 선택을 존중한다. e2e 테스트 12개 모두 통과.
