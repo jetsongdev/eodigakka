@@ -46,11 +46,11 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
   - [x] `REFRESH MATERIALIZED VIEW mv_dong_stats / mv_jeonse_ratio` (TRADE 390/390, JEONSE 411/411 매칭)
   - [x] SQL 검증 — 강북 14구 M형 4~8억 high confidence 동 정상 노출
   - [ ] `/api/affordable` 라이브 재검증 (dev 서버 재기동 후)
-- [~] cron 설정 (Mac M4 Pro, `0 3 * * *`)
-  - [x] `etl/run_etl.sh` 래퍼 작성 (.env 로드 + 로그 디렉토리 + venv python 직접 호출)
-  - [x] `etl/com.chsong.eodigakka-etl.plist` 작성 (launchd, RunAtLoad=false)
-  - [x] 스모크 테스트 통과 (`logs/etl-YYYYMMDD.log` exit 0)
-  - [x] launchd 등록 완료 (2026-05-05) — `launchctl list | grep eodigakka` → `- 0 com.chsong.eodigakka-etl`, state=not running, program 경로 정상
+- [x] cron 설정 — **GitHub Actions로 전환** (issue #1, TIL 함정 6중)
+  - [x] launchd 1차 시도 — TCC 차단으로 `~/Documents/` 접근 거부, plist는 LaunchAgents에 unload 상태로 보존
+  - [x] Neon Cloud(`ap-southeast-1`, free 0.5GB) + GHA `.github/workflows/etl.yml` (`0 18 * * *` UTC = KST 03:00)
+  - [x] DB 마이그레이션 + GitHub Secrets 등록 + `workflow_dispatch` run 25360703985 success
+  - [x] pooler `search_path` 영구 fix (`psycopg2.connect(options="-c search_path=public")`)
 
 ### API
 - [x] `web/` Next.js 16 프로젝트 초기화 (Kysely 포함, npm install 완료)
