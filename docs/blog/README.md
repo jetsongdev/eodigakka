@@ -25,6 +25,8 @@ tags: [postgres, neon, devops]
 
 - 2026-05-05 — [\"Failed to initialize WebGL\" 한 줄에 숨은 원인 셋](./2026-05-05-mapbox-webgl-failure-modes.md) — mapbox + React StrictMode/HMR + Chrome GPU process 실패 진단기 (TIL `2026-05-05-mapbox-webgl-strictmode`)
 - 2026-05-05 — [솔로 프로젝트 GHA workflow에 임의 코드 실행 취약점이 있었다](./2026-05-05-gha-shell-injection.md) — `${{ }}` substitution이 bash 파싱 전에 일어난다는 것의 무게, env hoist 한 단계로 막는 canonical 패턴
+- 2026-05-05 — [Stacked PR이 base 브랜치 squash merge로 자동 close되던 날](./2026-05-05-stacked-pr-auto-close.md) — solo dev에 stacked PR + `--delete-branch` 함정, gh CLI도 막히는 closed PR base 변경, rebase + 새 PR 복구 패턴
+- 2026-05-05 — [모바일에서 mouseleave가 안 발사된다 — touch hover의 진짜 모델](./2026-05-05-touch-mouseleave-hover.md) — 데스크톱 마우스 모델로 짠 tooltip이 모바일에서 영원히 잔류하는 회귀, `(hover: hover) and (pointer: fine)` + sidepanel 가드 두 단계 fix
 
 ## 시리즈 인덱스
 

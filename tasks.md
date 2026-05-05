@@ -6,9 +6,14 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ---
 
-## 다음 라운드 후보 (2026-05-05 기준)
+## 다음 라운드 후보 (2026-05-05 갱신, 인프라 정착 후)
 
-Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
+**완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
+
+**현재 우선순위 추천 (인프라 정착 직후)**:
+1. 🟡 **Mapbox 토큰 도메인 화이트리스트** (E 섹션, 보안, 5분) — 토큰 noise 작지만 비용 작아 즉시 추천
+2. 🟢 **Healthchecks.io ping** (B 섹션, 운영, 10분) — 다음 cron firing(2026-05-06 03:00 KST) 전에 박아두면 즉시 효력
+3. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -23,10 +28,23 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [ ] cron firing 지연 알림 — `last_succeeded_at`가 KST 03:00 + 1h 지나도 갱신 안 되면 GH issue 자동 생성
 - [ ] 트리거: 다음 cron firing(2026-05-06 03:00 KST) 통과 + 1주일 안정 운영 확인 후
 
-### C. 블로그 시리즈 풀 초안 (별도 세션 예정)
-- [ ] `docs/blog/2026-05-05-neon-migration-series/` 6편을 outline → 풀 초안(편당 800~1,500자 + 인용·이미지 자리)
-- [ ] frontmatter `status: draft → review` 전환 후 게시 플랫폼 결정
-- [ ] 트리거: 사용자 별도 세션에서 직접 진행
+### C. 블로그 콘텐츠 (단편 4 + 시리즈 1)
+
+draft 누적 중. 외부 게시 시점에 `status: draft → review → published` 전환.
+
+**단편 (각 ~600~900자)**:
+- [x] `2026-05-05-mapbox-webgl-failure-modes.md` — WebGL 초기화 실패 진단기
+- [x] `2026-05-05-gha-shell-injection.md` — GHA `${{ }}` 직접 치환 취약점 + env hoist 패턴 (2026-05-05 PR #5 advisor 부산물)
+- [x] `2026-05-05-stacked-pr-auto-close.md` — stacked PR 머지 시 base 삭제 함정 + 복구 패턴 (2026-05-05 PR #4 → #5 사건)
+- [x] `2026-05-05-touch-mouseleave-hover.md` — 터치 디바이스 mouseleave 안 발사 + `(hover: hover) and (pointer: fine)` 가드 (2026-05-05 PR #3)
+
+**시리즈 (Neon 마이그레이션 6편)**:
+- [ ] `2026-05-05-neon-migration-series/` 6편을 outline → 풀 초안(편당 800~1,500자 + 인용·이미지 자리)
+
+**다음 단계**:
+- [ ] frontmatter `status: draft → review` 전환 (외부 공유 직전)
+- [ ] 게시 플랫폼 결정 (개인 블로그 / Velog / Medium / dev.to 등)
+- [ ] 트리거: 사용자가 외부 공유 의향 결정 시
 
 ### D. Phase 2 진입 (대기 — 임장 1회 후 재평가)
 - [ ] ETL `TARGET_GU = SEOUL_25` 확장 (line 113)
@@ -58,22 +76,24 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [x] 첫 production deploy 완료 (2026-05-05, sha 20353d3, 24s build) — `https://eodigakka.vercel.app`
 - [x] 자동화 라인 검증 완료 — Push → Vercel build → GitHub Deployments → GHA workflow (run 25368302505, 21s) → Telegram 🎯 Production 토픽
 - [x] API 검증 — `/api/health` (trade 5748·rent 15295), `/api/polygons` (467개), `/api/affordable` (26개 동, freshness RTMS 2026-05-04)
-- [ ] 브라우저에서 페이지 동작 검증:
+- [x] 브라우저에서 페이지 동작 검증 (2026-05-05) — Mr. Song이 라이브 사이트에서 푸터 v0.5.2 확인, PR #3 모바일 hover fix 검증 완료
   - 지도 폴리곤 색칠
   - 슬라이더 +/- 칩 표시
   - 사이드패널 분포 차트
   - 모바일 collapsed/펼치기
-  - 푸터 면책 + 출처 + 버전(`v0.1.0 #20353d3`)
+  - 푸터 면책 + 출처 + 버전(`v0.5.2 #<sha>`)
 - [ ] (선택) 커스텀 도메인 연결 — Vercel dashboard → Domains → Add. SSL 자동.
 - [ ] (선택) Vercel Analytics / Speed Insights — Next.js 16 + Turbopack 빌드에 분석 추가
 
-### E.1 배포 워크플로 정책 (2026-05-05 결정)
+### E.1 배포 워크플로 정책 (2026-05-05 결정 + 자동화 도입)
 
 **main 직접 push 금지 — feature branch + Preview 검증 → PR merge로 Production**. CLAUDE.md 「배포 워크플로」 섹션 참조.
 
 - [x] CLAUDE.md에 워크플로 섹션 추가 (2026-05-05)
 - [x] GitHub branch protection 적용 (2026-05-05) — PR 강제, admin 우회 허용, force push/deletion 차단
-- [ ] 다음 변경부터 feature branch 흐름 적용해 검증
+- [x] feature branch 흐름 실전 검증 (PR #3 mobile hover fix, PR #5 version automation, 2026-05-05)
+- [x] **버전 bump 자동화 도입** (2026-05-05, PR #5) — `.github/workflows/version-bump.yml`. PR title의 Conventional Commit type → `feat:` minor / `fix:`·`chore:`·`docs:` 등 patch / `BREAKING CHANGE` major. `[Unreleased]` opt-in gate, env hoist로 shell injection 방어, KST 날짜, `RELEASE_PAT` 시크릿. 첫 self-test 정상 skip 통과.
+- [x] CHANGELOG retrofit (2026-05-05, PR #5) — 15섹션을 7개 버전 라벨(v0.0.1~v0.5.1)로 묶고 cluster preface 추가. v0.5.2부터 워크플로 자동 관리.
 
 ### F. 보안·운영 (Vercel 셋업 후 즉시)
 
