@@ -1,10 +1,38 @@
 # CHANGELOG
 
-형식: `## [날짜] 제목` → `### 추가 / 변경 / 수정 / 결정`
+형식: `## [vX.Y.Z] - YYYY-MM-DD - 제목` → `### 추가 / 변경 / 수정 / 결정`
+
+**버전 bump 룰** (`.github/workflows/version-bump.yml`):
+- 새 PR이 release 가치 있으면 CHANGELOG 최상단에 `## [Unreleased] - 제목` 섹션 추가 (날짜는 워크플로가 KST merge일로 자동 기입)
+- PR이 main에 merge되면 워크플로가 PR title 접두어 보고 bump 종류 결정 → `feat:` minor / `fix:`·`chore:`·`docs:`·`ci:`·`refactor:`·`perf:`·`test:`·`style:`·`build:` patch / PR body에 `BREAKING CHANGE` 포함 major
+- `[Unreleased]` 섹션이 **없으면 워크플로 skip** — bump 안 일어남. release 의사 없는 PR(코멘트 정리 등)은 [Unreleased] 생략하면 됨
+- 같은 버전이 여러 섹션에 걸쳐 반복되면 한 release에 포함된 별도 milestone임을 의미 (retrofit 산물)
 
 ---
 
-## [2026-05-05] 모바일 hover tooltip 영구 잔류 회귀 fix
+## [v0.5.2] - 2026-05-05 - 버전 bump 자동화 + CHANGELOG retrofit
+
+`.github/workflows/version-bump.yml` 도입 — PR이 main에 merge되면 PR title의 Conventional Commit type을 보고 `web/package.json` 자동 bump, `[Unreleased]` CHANGELOG entry를 실제 버전 + KST 날짜로 치환, git tag push까지. `[Unreleased]` 없으면 workflow 자체를 skip하는 opt-in 패턴 — release 의사 없는 PR은 churn 발생 안 함. Mr. Song이 1회 발급할 `RELEASE_PAT` 시크릿(repo contents:write)으로 main의 branch protection을 통과한다.
+
+기존 CHANGELOG 15개 섹션을 7개 버전 라벨(v0.0.1~v0.5.1)로 retrofit. 같은 버전이 여러 섹션에 반복되는 경우 = 한 release에 묶인 별도 milestone (예: v0.4.0이 UX 라운드 3 milestone, v0.3.0이 Neon 마이그 5 milestone).
+
+### 추가
+- `.github/workflows/version-bump.yml` — PR merge 트리거 + workflow_dispatch 복구용. `[Unreleased]` gate, bump type 결정, package.json bump, CHANGELOG 치환, commit + tag + push 5단계.
+
+### 변경
+- `web/package.json` — `0.1.0` → `0.5.2`. 0.1.0이 시각상 불일치(retrofit head는 v0.5.1)였고 본 PR의 chore release 1단계 더 → 0.5.2.
+- `CHANGELOG.md` — 헤더 형식 `## [vX.Y.Z] - YYYY-MM-DD - 제목`으로 통일. 형식 안내문에 [Unreleased] gate 룰 명시.
+- `CLAUDE.md` 「## 배포 워크플로」 — 자동 bump 단계 + bump 룰 표 + 2회 deploy 알림 정상 흐름 추가.
+
+### 결정
+- **opt-in 패턴**: workflow는 `[Unreleased]` 있을 때만 동작. trivial PR은 [Unreleased] 생략으로 자연 skip.
+- **PAT 사용**: GITHUB_TOKEN으론 protected main 못 미니까 fine-grained PAT(`RELEASE_PAT`)에 contents:write만 부여.
+- **2회 deploy 수용**: PR merge commit + bump commit 각각 Vercel rebuild → Telegram 🎯 Production 토픽 2회 알림. 솔로 dev 노이즈 미미. 단일 deploy를 위한 pre-merge bump는 GHA 복잡도가 너무 커 미채택.
+- **chicken-and-egg 회피**: 본 PR(workflow 도입 자체)은 [Unreleased] 사용 안 함. 수동으로 v0.5.2 라벨 부여 → workflow의 첫 실제 run은 다음 PR부터.
+
+---
+
+## [v0.5.1] - 2026-05-05 - 모바일 hover tooltip 영구 잔류 회귀 fix
 
 Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip`이 안 사라지고 SidePanel 위에 겹쳐 떠 있는 현상. 터치 환경에서는 mouseleave 이벤트가 안 발사되는 게 원인이라 mapbox `mouseleave` 핸들러로 hover state를 비울 수 없다.
 
@@ -14,7 +42,7 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] Vercel 배포 셋업 + Telegram 자동 알림 + 배포 워크플로 정책
+## [v0.5.0] - 2026-05-05 - Vercel 배포 셋업 + Telegram 자동 알림 + 배포 워크플로 정책
 
 `jetsongdev/eodigakka` Vercel 프로젝트 생성·연결, GitHub Deployments → GHA → Telegram 3토픽 분기 알림 자동화, main branch protection 적용으로 PR 강제 흐름 박음. 첫 production deploy 통과 (sha `4c2b288`, https://eodigakka.vercel.app).
 
@@ -39,7 +67,9 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] UX 마무리 라운드 — 슬라이더 비동기 색칠 + 사이드패널 분포 차트 + 모바일 collapsible
+> **v0.4.0 cluster** (3 milestones): UX 라운드 묶음. 아래 3섹션이 같은 release.
+
+## [v0.4.0] - 2026-05-05 - UX 마무리 라운드 — 슬라이더 비동기 색칠 + 사이드패널 분포 차트 + 모바일 collapsible
 
 `tasks.md` A. UX 마무리 갈래 3건 동시 처리. 슬라이더는 드래그 종료(`onValueCommit`)에서만 색칠하던 것을 드래그 중(`onValueChange`) 150ms debounce로 비동기 갱신, in-flight `/api/affordable` fetch는 `AbortController.abort()`로 cancel해 race를 막았다. 사이드패널은 `mv_dong_stats`의 `p25/median/p75`를 `/api/dong/[bjd]/complexes` 응답에 `distributions[]`로 노출하고 SVG 박스플롯으로 매매·전세 양쪽을 같은 가로축에 그렸다(현재 모드는 100%, 비교 모드는 55% 투명). 모바일(`max-width: 640px`)에서는 ControlPanel을 기본 접힘 상태로 시작하고 1줄 요약(`27개 동 · 매매 · 4억~8억 · M형`)만 노출, 사용자 토글 후에는 자동 동기화를 멈춰 선택을 존중한다. e2e 테스트 12개 모두 통과.
 
@@ -66,7 +96,7 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] Cash 변경 +/- 칩 + 결과 카드 위계 + 데이터 출처 attribution
+## [v0.4.0] - 2026-05-05 - Cash 변경 +/- 칩 + 결과 카드 위계 + 데이터 출처 attribution
 
 슬라이더 변경 결과를 정량으로 노출 + Evidence 가독성 개선 + 데이터 출처 명시. snapshot 06 캡처.
 
@@ -95,7 +125,7 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] 슬라이더 latency 0 — 클라 사이드 cash 필터로 전환
+## [v0.4.0] - 2026-05-05 - 슬라이더 latency 0 — 클라 사이드 cash 필터로 전환
 
 기존 debounce 150ms + AbortController 패턴은 여전히 매 입력마다 네트워크 왕복(평균 50~100ms)이 발생해 슬라이더 핸들 이동과 색칠 사이에 가시적 lag이 있었다. 같은 mode×size에서는 cash 범위만 바뀌면 표본 자체가 동일하므로, mode/size 변경 시 한 번만 fetch하고 cash 필터는 client 메모리에서 처리하도록 데이터 흐름을 재설계. 키보드로 슬라이더 25ms 간격 20회 이동하는 동안 `/api/affordable` 호출 0회 — 진짜 실시간 반응.
 
@@ -114,7 +144,9 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] 다음 라운드 후보 정리
+> **v0.3.0 cluster** (5 milestones): Neon 마이그레이션 + GHA cron 운영 전환 묶음. 아래 5섹션이 같은 release.
+
+## [v0.3.0] - 2026-05-05 - 다음 라운드 후보 정리
 
 `tasks.md` 상단에 "다음 라운드 후보 (2026-05-05 기준)" 섹션 추가. Neon 마이그레이션 + GHA cron 안정화 직후 시점에서 4갈래 후보(A. UX 잔여 / B. 운영 모니터링 / C. 블로그 풀 초안 / D. Phase 2)로 분류, 각 갈래별 트리거 조건 명시.
 
@@ -125,7 +157,7 @@ Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip
 
 ---
 
-## [2026-05-05] 함정 6 정확한 fix로 정정 — direct endpoint 채택
+## [v0.3.0] - 2026-05-05 - 함정 6 정확한 fix로 정정 — direct endpoint 채택
 
 a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 차단(`unsupported startup parameter in options: search_path`). PgBouncer 일반 지식을 vendor-specific 환경에 그대로 가져온 게 문제. 1차 fix는 검증 안 한 채 commit + 블로그 결론까지 박았다 — 메타 교훈 1건.
 
@@ -142,7 +174,7 @@ a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 �
 
 ---
 
-## [2026-05-05] 블로그 포스팅 시리즈 초안 추가
+## [v0.3.0] - 2026-05-05 - 블로그 포스팅 시리즈 초안 추가
 
 `docs/blog/2026-05-05-neon-migration-series/` — Neon 마이그레이션 함정 6중을 외부 독자용 narrative로 재구성한 6편 시리즈 (draft 상태). 시리즈 인덱스 + 각 편 frontmatter·outline·draft hook·핵심 코드 스니펫.
 
@@ -157,7 +189,7 @@ a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 �
 
 ---
 
-## [2026-05-05] GHA cron 안정화 + launchd 잔재 정리 (issue #1 close)
+## [v0.3.0] - 2026-05-05 - GHA cron 안정화 + launchd 잔재 정리 (issue #1 close)
 
 `workflow_dispatch` 첫 trigger 통과 후 직전 두 run의 `InvalidSchemaName` 분석 — Neon pooler가 transaction-mode 분배 시 일부 backend의 `search_path`에 `public` 누락. 영구 fix는 client-side startup option 1줄.
 
@@ -177,7 +209,7 @@ a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 �
 
 ---
 
-## [2026-05-05] Neon 마이그레이션 적재 통과 (issue #1 후반부)
+## [v0.3.0] - 2026-05-05 - Neon 마이그레이션 적재 통과 (issue #1 후반부)
 
 `bash db/migrate_to_neon.sh` 끝까지 green — bjd 467 / trade 5,456 / rent 14,744 / mv_stats 801, MV refresh 2건 + 인덱스 5건 재생성. GHA Secrets 등록·workflow_dispatch·launchd 정리는 issue #1로 이어진다.
 
@@ -189,7 +221,7 @@ a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 �
 
 ---
 
-## [2026-05-05] Phase 1 프론트 완성 + e2e 12/12 + 정책 추가
+## [v0.2.0] - 2026-05-05 - Phase 1 프론트 완성 + e2e 12/12 + 정책 추가
 
 Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
 
@@ -238,7 +270,9 @@ Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
 
 ---
 
-## [2026-05-05] ADR-008 실행 — bjd_polygon 법정동 마이그레이션 완료
+> **v0.1.0 cluster** (3 milestones): Phase 1 ETL 백엔드 + 법정동 마이그레이션 묶음. 아래 3섹션이 같은 release.
+
+## [v0.1.0] - 2026-05-05 - ADR-008 실행 — bjd_polygon 법정동 마이그레이션 완료
 
 ### 결정
 - ADR-008(법정동 폴리곤 채택) 실행 단계 완료. SPEC 변경 없음.
@@ -263,7 +297,7 @@ Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
 
 ---
 
-## [2026-05-05] ETL 자동화 래퍼 + launchd plist
+## [v0.1.0] - 2026-05-05 - ETL 자동화 래퍼 + launchd plist
 
 ### 추가
 - `etl/run_etl.sh` — `.env` 로드 + `logs/etl-YYYYMMDD.log` 출력 + venv python 직접 호출. cron/launchd 양쪽 호환. `set -euo pipefail`로 중간 실패 캐치.
@@ -279,7 +313,7 @@ Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
 
 ---
 
-## [2026-05-04] Phase 1 ETL 검증 + API smoke + 도메인 함정 발견
+## [v0.1.0] - 2026-05-04 - Phase 1 ETL 검증 + API smoke + 도메인 함정 발견
 
 ### 결정 (ADR)
 - ADR-008: bjd_polygon 행정동→법정동 코드 체계 마이그레이션 (LSMD 법정동경계 shapefile 채택)
@@ -312,7 +346,7 @@ Phase 1 색칠지도 6단계 모두 동작 완료, 회귀 안전망 1차 구축.
 
 ---
 
-## [2026-05-04] Phase 0 — 데이터 검증 및 설계 확정
+## [v0.0.1] - 2026-05-04 - Phase 0 — 데이터 검증 및 설계 확정
 
 ### 결정 (ADR)
 - ADR-001: 서울 25구 코드 중복 제거 → `GANGBUK_14` / `GANGNAM_11` / `SEOUL_25` 분리
