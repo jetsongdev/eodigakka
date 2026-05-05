@@ -219,6 +219,43 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 ---
 
+## 배포 워크플로 (2026-05-05~)
+
+**main 직접 push 금지** — Vercel이 main을 Production으로 자동 deploy하기 때문에 검증 없이 라이브로 간다. Preview에서 한 번 거치자.
+
+### 표준 흐름
+
+```
+1. git checkout -b feat/<scope>           # 또는 fix/<scope>
+2. 작업 + commit                            # 명시적 staging, 한국어 한 줄 요약
+3. git push -u origin <branch>              # → Vercel 자동 Preview deploy
+   → Telegram 🚀 Preview 토픽 알림 + URL 도착
+4. Preview URL에서 동작 검증                # 브라우저 또는 curl
+5. gh pr create                             # 자가 review
+6. gh pr merge --squash --delete-branch     # → main 자동 Production deploy
+   → Telegram 🎯 Production 토픽 알림
+```
+
+### 예외 (main 직접 push 허용)
+
+- 문서만 변경 (`docs/`, `tasks.md`, `CHANGELOG.md`, `.md`만) — 빌드/UI 영향 없음
+- `.github/workflows/` 자체 변경 — preview에서 검증 불가능 (deployment_status 트리거 못 함)
+- 핫픽스 — 명시적으로 "긴급" 지시받은 경우만
+
+### 검증 체크리스트 (Preview URL에서)
+
+- `/api/health` 200 + `etl_disabled: false` + ETL last_succeeded_at 합리적
+- `/api/polygons` features 467개
+- `/api/affordable?mode=trade&...` dongs 비어있지 않음
+- 페이지 로드 → LoadingOverlay → 지도 + 폴리곤 색칠
+- 푸터 버전(`v0.1.0 #<sha>`) 새 commit 반영 확인
+
+### Telegram 알림 검증
+
+각 push 후 1분 내 Telegram 토픽 알림 도착해야 정상. 안 오면 `gh run list --workflow=telegram-deploy-notify.yml`로 워크플로 상태 확인.
+
+---
+
 ## 도구 우선순위
 
 ### CLI > MCP (대체 가능한 경우)

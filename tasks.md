@@ -66,6 +66,14 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [ ] (선택) 커스텀 도메인 연결 — Vercel dashboard → Domains → Add. SSL 자동.
 - [ ] (선택) Vercel Analytics / Speed Insights — Next.js 16 + Turbopack 빌드에 분석 추가
 
+### E.1 배포 워크플로 정책 (2026-05-05 결정)
+
+**main 직접 push 금지 — feature branch + Preview 검증 → PR merge로 Production**. CLAUDE.md 「배포 워크플로」 섹션 참조.
+
+- [x] CLAUDE.md에 워크플로 섹션 추가 (2026-05-05)
+- [x] GitHub branch protection 적용 (2026-05-05) — PR 강제, admin 우회 허용, force push/deletion 차단
+- [ ] 다음 변경부터 feature branch 흐름 적용해 검증
+
 ### F. 보안·운영 (Vercel 셋업 후 즉시)
 
 - [ ] `gh secret set DATABASE_URL` 등 GitHub 시크릿이 ETL workflow에서 쓰는 것과 Vercel 환경변수 일관성 점검 (값이 동일한지 — Neon 비번 회전 시 두 곳 다 갱신 필요)
