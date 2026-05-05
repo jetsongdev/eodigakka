@@ -10,6 +10,24 @@
 
 ---
 
+## [Unreleased] - Mapbox 토큰 환경별 분리 + client-token-rotation 스킬 + ADR-009
+
+`NEXT_PUBLIC_MAPBOX_TOKEN`을 production / preview 환경별로 분리. Mapbox URL restriction이 wildcard 미지원이라 단일 토큰으론 hash 기반 Vercel preview URL을 보호할 수 없는 구조. 신규 토큰 `eodigakka-prod`(restriction `https://eodigakka.vercel.app`만)을 Production env에, 기존 default token(unrestricted)을 Preview env + 로컬 `.env.local`에 분리. Production redeploy(캐시 해제) 후 지도 작동 검증.
+
+### 결정
+- ADR-009: client-side `NEXT_PUBLIC_*` token은 환경별 분리 발급 패턴 표준화. Production은 strict URL restriction, Preview/local은 unrestricted (노출 표면이 작아 trade-off 합리).
+
+### 추가
+- `docs/til/2026-05-05-mapbox-token-url-restriction.md` — wildcard 미지원 + 환경별 분리 우회.
+- `docs/blog/2026-05-05-mapbox-token-url-restriction.md` — 외부 공유용 단편 draft.
+- `.claude/skills/client-token-rotation/SKILL.md` — 이번 세션의 5단계 워크플로(third-party 콘솔 발급 → Vercel env 분리 → redeploy → DevTools 검증 → til-flow 연결)를 재사용 가능한 스킬로 추출. Sentry DSN·Analytics·Stripe publishable key 등에 동일 적용.
+
+### 변경
+- `tasks.md` E 섹션 — Mapbox 화이트리스트 항목 체크 + 분리 토큰 결과 기록.
+- `CLAUDE.md` 「반복 작업 → skill-creator」 — `client-token-rotation` 스킬 항목 추가.
+
+---
+
 ## [v0.5.2] - 2026-05-05 - 버전 bump 자동화 + CHANGELOG retrofit
 
 `.github/workflows/version-bump.yml` 도입 — PR이 main에 merge되면 PR title의 Conventional Commit type을 보고 `web/package.json` 자동 bump, `[Unreleased]` CHANGELOG entry를 실제 버전 + KST 날짜로 치환, git tag push까지. `[Unreleased]` 없으면 workflow 자체를 skip하는 opt-in 패턴 — release 의사 없는 PR은 churn 발생 안 함. Mr. Song이 1회 발급할 `RELEASE_PAT` 시크릿(repo contents:write)으로 main의 branch protection을 통과한다.

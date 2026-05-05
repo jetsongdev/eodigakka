@@ -523,6 +523,11 @@ jeonse-buyable-map/
 - **근거**: SPEC §4에 "1년 정체" 명시. 미검증 외부 레포에 Phase 0 전체를 의존하면 반나절이 디버깅으로 소실.
 - **영향**: §10 Phase 0 설명에 "(MCP 검증 우선, fallback: PDR CLI)" 추가.
 
+### ADR-009: client-side 토큰은 환경별 분리 발급 (2026-05-05)
+- **결정**: `NEXT_PUBLIC_*` 키처럼 client 번들에 노출되는 third-party 토큰은 Vercel 환경별로 분리 발급한다. Production env에는 strict URL restriction이 걸린 전용 토큰, Preview / Development env에는 unrestricted (또는 느슨한 restriction) default 토큰을 박는다.
+- **근거**: Mapbox URL restriction은 정확한 origin 매칭만 허용하고 wildcard·port wildcard·subdomain 패턴 모두 거부한다. Vercel preview URL은 push마다 hash가 바뀌어 사전 등록 불가. 단일 토큰으론 production + preview를 동시에 보호할 수 없어 환경별 분리 외 대안이 없다. trade-off: preview·local은 노출 표면이 작고(PR-only URL, 로컬은 외부 비노출) abuse 시 production 사용량에 영향 없으므로 unrestricted 수용 가능.
+- **영향**: §11 보안·운영 섹션에 "client-side token rotation 절차" 추가 필요. 현재 `NEXT_PUBLIC_MAPBOX_TOKEN` 1건 적용 완료. 향후 Sentry DSN, Analytics token 등 동일 패턴 후보. Vercel `Settings → Environment Variables`에서 같은 key를 환경별로 다른 value 등록하는 패턴이 표준. TIL `2026-05-05-mapbox-token-url-restriction`.
+
 ### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04 결정 / 2026-05-05 실행)
 - **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 V-World `LSMD_ADM_SECT_UMD_11`(서울 법정 읍면동 경계 SHP, EPSG:5186→4326 변환) 기준으로 재적재.
 - **근거**: RTMS API는 법정동 코드만 제공(`법정동시군구코드+법정동읍면동코드` → `1138010300` 패턴). HangJeongDong은 행정동 코드(`adm_cd2 = 1138051000`)라 JOIN 0건. JEONSE는 동 이름 fallback이 우연히 행정동에 매핑되지만 1법정동=다행정동 케이스(예: 불광동→불광1동/2동)에서 데이터 손실·임의 매핑 발생. 부동산 도메인 표준은 법정동.
