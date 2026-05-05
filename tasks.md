@@ -6,6 +6,40 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ---
 
+## 다음 라운드 후보 (2026-05-05 기준)
+
+Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
+
+### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
+- [ ] 슬라이더 드래그 중 비동기 색칠 — debounce 150ms + AbortController, 또는 클라 사이드 캐싱 (line 72~76)
+- [ ] 사이드패널 분포 차트 + 매매·전세 동시 비교 (line 77~88)
+- [ ] 모바일 범례 분리 + 컨트롤 collapsible (line 89~94)
+- [ ] 트리거: 데스크톱 사용자 fb·실사용 시 즉시 — 작은 patch들로 분리 가능
+
+### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
+- [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
+- [ ] Healthchecks.io ping — workflow 마지막 step에 `curl -fsS https://hc-ping.com/<UUID>` 한 줄 (line 143)
+- [ ] cron firing 지연 알림 — `last_succeeded_at`가 KST 03:00 + 1h 지나도 갱신 안 되면 GH issue 자동 생성
+- [ ] 트리거: 다음 cron firing(2026-05-06 03:00 KST) 통과 + 1주일 안정 운영 확인 후
+
+### C. 블로그 시리즈 풀 초안 (별도 세션 예정)
+- [ ] `docs/blog/2026-05-05-neon-migration-series/` 6편을 outline → 풀 초안(편당 800~1,500자 + 인용·이미지 자리)
+- [ ] frontmatter `status: draft → review` 전환 후 게시 플랫폼 결정
+- [ ] 트리거: 사용자 별도 세션에서 직접 진행
+
+### D. Phase 2 진입 (대기 — 임장 1회 후 재평가)
+- [ ] ETL `TARGET_GU = SEOUL_25` 확장 (line 113)
+- [ ] 평형 size_bucket 세분화 — XS 추가, 1인 가구 케이스 분리 (line 117~123)
+- [ ] 신축/구축 build_year 토글 (line 124~128)
+- [ ] 트리거: Phase 1 임장 1회 + 강북 14구 후보 부족 판단
+
+### 비-차단 정리 (편한 시점에)
+- [ ] `etl/run_etl.sh` — launchd 폐기됐으니 사용 의도 재정의 또는 삭제 검토
+- [ ] `db/migrate_to_neon.sh` — 1회성 스크립트지만 Neon 재마이그레이션 시 재사용 가능. README에 "초기화 절차" 섹션으로 보존 명시
+- [ ] CLAUDE.md 표 갱신 — local docker postgres 명령어가 여전히 유효한지 (web dev에는 OK, ETL은 Neon 직결로 전환)
+
+---
+
 ## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)
 
 - [x] RTMS API 키 발급·승인 (data.go.kr)
@@ -140,7 +174,9 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시점에 도입 검토.
 
-- [ ] **Healthchecks.io ping** — `run_etl.sh` 끝에 `curl -fsS -m 10 --retry 3 https://hc-ping.com/<UUID>` 한 줄. 새벽 03:00에 안 돌면 이메일/Telegram 알림. 무료 tier 충분.
+- [ ] **Neon free plan 0.5GB 한도 모니터링** — `pg_database_size('neondb')` 주간 query. 80% (≈400MB) 도달 시 alert + plan 업그레이드 또는 raw 테이블 TTL 검토. 현재 dump 7MB라 여유 큼이지만 서울 25구·12개월 누적 시 빨리 차오를 수 있음
+- [ ] **Healthchecks.io ping** — `run_etl.sh` 끝(또는 GHA workflow 마지막 step)에 `curl -fsS -m 10 --retry 3 https://hc-ping.com/<UUID>` 한 줄. 새벽 03:00에 안 돌면 이메일/Telegram 알림. 무료 tier 충분.
+- [ ] **cron firing 지연 알림** — GHA scheduler가 부하로 1~2시간 늦어질 수 있음. `last_succeeded_at`가 예상 firing 후 +1h 지나도 갱신 안 되면 GH issue 자동 생성하는 별도 cron 작성
 - [ ] **/api/health 외부 ping** — Uptime Kuma 셀프호스트 또는 Healthchecks.io의 HTTP check로 5분마다 ping
 - [ ] (확장 시) **Grafana Cloud 무료 tier** — agent로 logs 송신, ETL 트렌드 시계열 시각화
 - [ ] (서비스화 단계) **Grafana + Loki 셀프호스트** — 풀 컨트롤, RAM ~1GB

@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-05-05] 다음 라운드 후보 정리
+
+`tasks.md` 상단에 "다음 라운드 후보 (2026-05-05 기준)" 섹션 추가. Neon 마이그레이션 + GHA cron 안정화 직후 시점에서 4갈래 후보(A. UX 잔여 / B. 운영 모니터링 / C. 블로그 풀 초안 / D. Phase 2)로 분류, 각 갈래별 트리거 조건 명시.
+
+### 추가
+- `tasks.md` 다음 라운드 후보 섹션 — 4갈래 분류 + 비-차단 정리(`run_etl.sh` 삭제 검토 등) 섹션
+- `tasks.md` Phase B에 "Neon free plan 0.5GB 한도 모니터링" / "cron firing 지연 알림" 2건 추가
+- 블로그 시리즈 풀 초안은 별도 세션에서 진행한다는 결정 명시 (사용자 의향 반영)
+
+---
+
 ## [2026-05-05] 함정 6 정확한 fix로 정정 — direct endpoint 채택
 
 a2eb788의 `options="-c search_path=public"` startup option을 Neon pooler가 차단(`unsupported startup parameter in options: search_path`). PgBouncer 일반 지식을 vendor-specific 환경에 그대로 가져온 게 문제. 1차 fix는 검증 안 한 채 commit + 블로그 결론까지 박았다 — 메타 교훈 1건.
