@@ -24,6 +24,7 @@ tags: [postgres, neon, devops]
 ## 단편
 
 - 2026-05-05 — [\"Failed to initialize WebGL\" 한 줄에 숨은 원인 셋](./2026-05-05-mapbox-webgl-failure-modes.md) — mapbox + React StrictMode/HMR + Chrome GPU process 실패 진단기 (TIL `2026-05-05-mapbox-webgl-strictmode`)
+- 2026-05-05 — [솔로 프로젝트 GHA workflow에 임의 코드 실행 취약점이 있었다](./2026-05-05-gha-shell-injection.md) — `${{ }}` substitution이 bash 파싱 전에 일어난다는 것의 무게, env hoist 한 단계로 막는 canonical 패턴
 
 ## 시리즈 인덱스
 
