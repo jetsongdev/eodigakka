@@ -4,6 +4,16 @@
 
 ---
 
+## [2026-05-05] 모바일 hover tooltip 영구 잔류 회귀 fix
+
+Production 배포 후 발견된 모바일 회귀. 동을 탭하면 `HoverTooltip`이 안 사라지고 SidePanel 위에 겹쳐 떠 있는 현상. 터치 환경에서는 mouseleave 이벤트가 안 발사되는 게 원인이라 mapbox `mouseleave` 핸들러로 hover state를 비울 수 없다.
+
+### 수정
+- `web/app/page.tsx` — `useIsHoverCapable` 훅 추가 (`matchMedia('(hover: hover) and (pointer: fine)')`). 터치 디바이스에선 HoverTooltip 자체를 렌더 안 함.
+- 동시에 `!selectedBjd` 가드 추가 — sidepanel 열린 동안 데스크톱에서도 tooltip 자동 숨김 (포커스 한곳).
+
+---
+
 ## [2026-05-05] Vercel 배포 셋업 + Telegram 자동 알림 + 배포 워크플로 정책
 
 `jetsongdev/eodigakka` Vercel 프로젝트 생성·연결, GitHub Deployments → GHA → Telegram 3토픽 분기 알림 자동화, main branch protection 적용으로 PR 강제 흐름 박음. 첫 production deploy 통과 (sha `4c2b288`, https://eodigakka.vercel.app).

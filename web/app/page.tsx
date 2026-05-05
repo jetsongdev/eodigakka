@@ -121,6 +121,20 @@ function formatMan(man: number): string {
   return `${eok.toFixed(1)}억`;
 }
 
+function useIsHoverCapable() {
+  // SSR 시에는 true로 시작 — 데스크톱 가정. 마운트 후 matchMedia로 보정.
+  const [capable, setCapable] = useState(true);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    setCapable(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setCapable(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return capable;
+}
+
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -134,6 +148,8 @@ export default function MapPage() {
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
+  // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
+  const isHoverCapable = useIsHoverCapable();
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
@@ -437,7 +453,7 @@ export default function MapPage() {
           />
         )}
 
-        {hover && (
+        {hover && isHoverCapable && !selectedBjd && (
           <HoverTooltip
             hover={hover}
             dong={affordableMapRef.current.get(hover.bjdCode) ?? null}
