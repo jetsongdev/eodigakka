@@ -1,0 +1,66 @@
+name: RTMS ETL (daily)
+
+on:
+  schedule:
+    # 매일 18:00 UTC = KST 03:00
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+    # GitHub UI에서 수동 트리거 가능
+
+concurrency:
+  group: etl-rtms
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install ETL dependencies
+        run: |
+          uv venv .venv-etl --python 3.12
+          uv pip install --python .venv-etl/bin/python3 \
+            "PublicDataReader>=1.0.29" \
+            "psycopg2-binary>=2.9.9" \
+            "pandas>=2.2.0" \
+            "python-dotenv>=1.0.1"
+
+      - name: Run ETL
+        env:
+          ETL_DISABLED: '0'
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RTMS_KEY: ${{ secrets.RTMS_KEY }}
+        run: |
+          .venv-etl/bin/python3 etl/fetch_rtms.py
+
+      - name: Show ETL summary (post)
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          .venv-etl/bin/python3 - <<'EOF'
+          import os, psycopg2
+          conn = psycopg2.connect(os.environ['DATABASE_URL'])
+          with conn.cursor() as cur:
+              cur.execute("""
+                SELECT
+                  (SELECT COUNT(*) FROM tx_apt_trade) AS trade,
+                  (SELECT COUNT(*) FROM tx_apt_rent) AS rent,
+                  (SELECT last_succeeded_at FROM etl_job_status WHERE job_name='rtms_phase1') AS last_ok,
+                  (SELECT mv_refreshed_at  FROM etl_job_status WHERE job_name='rtms_phase1') AS mv_at
+              """)
+              row = cur.fetchone()
+              print(f"trade_count={row[0]}, rent_count={row[1]}, last_ok={row[2]}, mv_refreshed={row[3]}")
+          EOF
