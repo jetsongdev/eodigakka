@@ -1,0 +1,200 @@
+# PR이 main에 merge되면 PR title의 Conventional Commit type을 보고 web/package.json
+# 버전을 자동 bump한다. 단, **CHANGELOG.md에 `## [Unreleased] - ...` 섹션이 있을 때만**
+# 동작 — PR 작성자가 명시적으로 release 의사를 표한 경우에만 bump.
+# 같은 PR에서 [Unreleased] entry를 [vX.Y.Z]로 치환하고 날짜를 KST 기준 merge일로 갱신.
+# tag도 함께 push.
+#
+# bump 룰 (CLAUDE.md 「## 배포 워크플로」 참조):
+#   feat:                                                 → minor (0.5.1 → 0.6.0)
+#   fix: / chore: / docs: / ci: / refactor: / perf: / test: / style: / build: → patch (0.5.1 → 0.5.2)
+#   PR body에 "BREAKING CHANGE"                           → major (0.5.1 → 1.0.0)
+#   매칭 안 됨                                              → patch (안전 fallback + ::warning)
+#
+# 자기 트리거 방지: bump commit은 직접 push이지 PR이 아니라 이 워크플로를 다시 발사하지 않음.
+#
+# branch protection 통과: GITHUB_TOKEN으로는 main에 push 불가 → `RELEASE_PAT` 시크릿 필요
+# (fine-grained PAT, 이 repo의 contents:write + metadata:read).
+
+name: Version bump on PR merge
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '복구용: 처리할 PR 번호 (CHANGELOG에 [Unreleased]가 남아 있는 PR)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PAT }}
+          fetch-depth: 0
+
+      - name: PR 메타 (workflow_dispatch면 API로 조회)
+        id: pr
+        env:
+          # ${{ }} 치환은 bash 파싱 전이라 PR title/body가 user-controlled면 shell injection 위험.
+          # 모두 env로 hoist해서 "$VAR" expansion으로만 사용 → bash가 재파싱 안 함.
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUM_INPUT: ${{ inputs.pr_number }}
+          PR_TITLE_EVENT: ${{ github.event.pull_request.title }}
+          PR_BODY_EVENT: ${{ github.event.pull_request.body }}
+          PR_NUM_EVENT: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            PR_NUM="$PR_NUM_INPUT"
+            # 복구용 manual 입력이라 numeric 검증 1회
+            if ! [[ "$PR_NUM" =~ ^[0-9]+$ ]]; then
+              echo "::error::pr_number must be numeric, got: $PR_NUM"
+              exit 1
+            fi
+            JSON=$(gh pr view "$PR_NUM" --json title,body,number)
+          else
+            PR_NUM="$PR_NUM_EVENT"
+            JSON=$(jq -n \
+              --arg t "$PR_TITLE_EVENT" \
+              --arg b "$PR_BODY_EVENT" \
+              --arg n "$PR_NUM" \
+              '{title: $t, body: $b, number: ($n|tonumber)}')
+          fi
+          # 멀티라인 body는 GITHUB_OUTPUT delimiter로 처리
+          {
+            echo "number=$PR_NUM"
+            echo "title<<EOF_TITLE"
+            echo "$JSON" | jq -r '.title'
+            echo "EOF_TITLE"
+            echo "body<<EOF_BODY"
+            echo "$JSON" | jq -r '.body // ""'
+            echo "EOF_BODY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: CHANGELOG에 [Unreleased] 있는지 확인 (없으면 전체 skip)
+        id: gate
+        run: |
+          set -euo pipefail
+          if grep -qE '^## \[Unreleased\]' CHANGELOG.md; then
+            echo "has_unreleased=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::CHANGELOG에 [Unreleased] 발견 — bump 진행"
+          else
+            echo "has_unreleased=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CHANGELOG에 [Unreleased] 없음 — bump skip (release 의사 없는 PR로 간주)"
+          fi
+
+      - name: bump type 결정
+        id: bump
+        if: steps.gate.outputs.has_unreleased == 'true'
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
+        run: |
+          set -euo pipefail
+          if printf '%s' "$PR_BODY" | grep -qiE 'BREAKING[ -]?CHANGE'; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+            echo "::notice::bump=major (BREAKING CHANGE in PR body)"
+            exit 0
+          fi
+          if printf '%s' "$PR_TITLE" | grep -qE '^feat(\([^)]+\))?:'; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+            echo "::notice::bump=minor (feat: in title)"
+            exit 0
+          fi
+          if printf '%s' "$PR_TITLE" | grep -qE '^(fix|chore|docs|ci|refactor|perf|test|style|build)(\([^)]+\))?:'; then
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+            echo "::notice::bump=patch (recognized type in title)"
+            exit 0
+          fi
+          echo "type=patch" >> "$GITHUB_OUTPUT"
+          echo "::warning::PR title이 Conventional Commit 형식 미일치 — patch fallback. title=$PR_TITLE"
+
+      - name: web/package.json bump
+        id: version
+        if: steps.gate.outputs.has_unreleased == 'true'
+        working-directory: web
+        run: |
+          set -euo pipefail
+          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          NEW=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "::notice::package.json → v$NEW"
+
+      - name: CHANGELOG [Unreleased] → [vX.Y.Z] + KST 날짜 갱신
+        if: steps.gate.outputs.has_unreleased == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import os, re, sys
+          from datetime import datetime, timezone, timedelta
+          version = os.environ["NEW_VERSION"]
+          kst = timezone(timedelta(hours=9))
+          today = datetime.now(kst).strftime("%Y-%m-%d")
+          path = "CHANGELOG.md"
+          text = open(path, encoding="utf-8").read()
+          # 형식 우선순위:
+          #   "## [Unreleased] - YYYY-MM-DD - 제목" → "## [vX.Y.Z] - <today> - 제목"
+          #   "## [Unreleased] - 제목"               → "## [vX.Y.Z] - <today> - 제목"
+          #   "## [Unreleased]"                      → "## [vX.Y.Z] - <today>"
+          patterns = [
+              (r"^## \[Unreleased\] - \d{4}-\d{2}-\d{2}( - .+)?$",
+               lambda m: f"## [v{version}] - {today}{m.group(1) or ''}"),
+              (r"^## \[Unreleased\]( - .+)?$",
+               lambda m: f"## [v{version}] - {today}{m.group(1) or ''}"),
+          ]
+          for pat, repl in patterns:
+              new_text, n = re.subn(pat, repl, text, count=1, flags=re.M)
+              if n:
+                  text = new_text
+                  print(f"matched: {pat}")
+                  break
+          else:
+              print("ERROR: gate가 [Unreleased] 발견했지만 어떤 정규식도 매칭 안 됨", file=sys.stderr)
+              sys.exit(1)
+          open(path, "w", encoding="utf-8").write(text)
+          print(f"replaced [Unreleased] → [v{version}] - {today}")
+          PY
+
+      - name: commit + tag + push
+        if: steps.gate.outputs.has_unreleased == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/package.json CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "::warning::no-op: staged 변경 없음. skip."
+            exit 0
+          fi
+          git commit -m "chore(release): v$NEW_VERSION
+
+          PR #$PR_NUM: $PR_TITLE"
+          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
+            echo "::warning::tag v$NEW_VERSION 이미 존재 — tag step skip, commit만 push"
+            git push origin main
+          else
+            git tag "v$NEW_VERSION"
+            git push origin main
+            git push origin "v$NEW_VERSION"
+          fi
+          echo "::notice::released v$NEW_VERSION"
