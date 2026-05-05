@@ -58,3 +58,6 @@ tsconfig.tsbuildinfo
 web/test-results/
 web/playwright-report/
 test-results/
+
+# Vercel CLI link state (monorepo: repo root에 둠, root directory는 dashboard에서 web으로 설정)
+.vercel/
