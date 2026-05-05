@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
+## [v0.5.4] - 2026-05-05 - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
 
 PR #6(v0.5.3) merge 직전 19분째 Queued 상태에서 발견된 운영 함정. Vercel Hobby plan은 account-wide 동시 빌드 1개라 같은 account의 다른 프로젝트(junggu-trash-map 등) stuck이 우리 빌드까지 막는다. dispatcher phantom hold 상태가 되면 visible한 in-progress 빌드가 없어도 새 enqueue가 진행 안 됨. 진단 + 복구 절차(All Projects 뷰 → 가장 오래된 phantom suspect cancel → 1~2분 관찰)를 TIL + 블로그 단편으로 박음.
 
