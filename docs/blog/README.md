@@ -28,6 +28,7 @@ tags: [postgres, neon, devops]
 - 2026-05-05 — [Stacked PR이 base 브랜치 squash merge로 자동 close되던 날](./2026-05-05-stacked-pr-auto-close.md) — solo dev에 stacked PR + `--delete-branch` 함정, gh CLI도 막히는 closed PR base 변경, rebase + 새 PR 복구 패턴
 - 2026-05-05 — [모바일에서 mouseleave가 안 발사된다 — touch hover의 진짜 모델](./2026-05-05-touch-mouseleave-hover.md) — 데스크톱 마우스 모델로 짠 tooltip이 모바일에서 영원히 잔류하는 회귀, `(hover: hover) and (pointer: fine)` + sidepanel 가드 두 단계 fix
 - 2026-05-05 — [Mapbox 토큰을 'http://localhost:*'로 잠그려다 만난 wildcard 금지의 벽](./2026-05-05-mapbox-token-url-restriction.md) — Mapbox URL restriction의 exact origin 매칭 + Vercel preview hash URL의 충돌, 환경별 token 분리 발급 패턴 (TIL `2026-05-05-mapbox-token-url-restriction`)
+- 2026-05-05 — [Vercel Preview 빌드가 19분째 Queued였다 — Hobby plan account 큐의 진단법](./2026-05-05-vercel-hobby-queue-stuck.md) — All Projects 뷰 + 가장 오래된 phantom suspect cancel로 dispatcher 깨우기 (TIL `2026-05-05-vercel-hobby-queue-stuck`)
 
 ## 시리즈 인덱스
 

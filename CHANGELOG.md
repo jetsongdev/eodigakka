@@ -10,6 +10,24 @@
 
 ---
 
+## [Unreleased] - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
+
+PR #6(v0.5.3) merge 직전 19분째 Queued 상태에서 발견된 운영 함정. Vercel Hobby plan은 account-wide 동시 빌드 1개라 같은 account의 다른 프로젝트(junggu-trash-map 등) stuck이 우리 빌드까지 막는다. dispatcher phantom hold 상태가 되면 visible한 in-progress 빌드가 없어도 새 enqueue가 진행 안 됨. 진단 + 복구 절차(All Projects 뷰 → 가장 오래된 phantom suspect cancel → 1~2분 관찰)를 TIL + 블로그 단편으로 박음.
+
+부수 대응으로 `.md` only commit은 Vercel build skip 적용 — 도큐 변경마다 main rebuild + Telegram 노이즈가 빈번해 큐 부하의 한 원인이었다. `vercel.json` `ignoreCommand`로 `.md` 외 변경 없으면 exit 0(skip).
+
+### 추가
+- `docs/til/2026-05-05-vercel-hobby-queue-stuck.md` — 현상·원인·수정·교훈 4단락
+- `docs/blog/2026-05-05-vercel-hobby-queue-stuck.md` — 외부 공유용 단편 draft
+- `web/vercel.json` — `ignoreCommand`로 `.md` only commit build skip
+
+### 변경
+- `docs/til/README.md` Infra 카테고리 한 줄 추가
+- `docs/blog/README.md` 단편 인덱스 한 줄 추가
+- `CLAUDE.md` 「배포 워크플로」 — `.md` only commit은 Vercel build 자동 skip 명시
+
+---
+
 ## [v0.5.3] - 2026-05-05 - Mapbox 토큰 환경별 분리 + client-token-rotation 스킬 + ADR-009
 
 `NEXT_PUBLIC_MAPBOX_TOKEN`을 production / preview 환경별로 분리. Mapbox URL restriction이 wildcard 미지원이라 단일 토큰으론 hash 기반 Vercel preview URL을 보호할 수 없는 구조. 신규 토큰 `eodigakka-prod`(restriction `https://eodigakka.vercel.app`만)을 Production env에, 기존 default token(unrestricted)을 Preview env + 로컬 `.env.local`에 분리. Production redeploy(캐시 해제) 후 지도 작동 검증.

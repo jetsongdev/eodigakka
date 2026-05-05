@@ -254,6 +254,10 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 - 문서만 변경 (`docs/`, `tasks.md`, `CHANGELOG.md`, `.md`만) — 빌드/UI 영향 없음. 이 경로는 version bump 안 일어남(PR 안 거쳐서)
 - `.github/workflows/` 자체 변경 — preview에서 검증 불가능 (deployment_status 트리거 못 함)
+
+### `.md` only commit은 Vercel build 자동 skip (2026-05-05~)
+
+`web/vercel.json`의 `ignoreCommand`가 `.md` 외 변경 없으면 exit 0(skip). 즉 docs/ TIL·blog·CHANGELOG·README 류 commit이 main에 들어가도 Vercel rebuild 트리거 안 됨 → Telegram 🎯 Production 알림 노이즈 제거 + Hobby plan 큐 부하 감소. PR 흐름은 동일하지만 Preview deploy도 같이 skip되니 도큐 PR은 머지 전 로컬 review로 충분. 코드 변경 섞이면(예: `vercel.json`, `web/lib/*.ts` 등 .md 외 파일 동시 수정) 정상 빌드 트리거.
 - 핫픽스 — 명시적으로 "긴급" 지시받은 경우만
 
 ### 검증 체크리스트 (Preview URL에서)
