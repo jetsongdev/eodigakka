@@ -14,6 +14,7 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
 - [x] 사이드패널 분포 차트 + 매매·전세 동시 비교 — `/api/dong/.../complexes` `distributions[]` + SVG 박스플롯 (2026-05-05)
 - [x] 모바일 컨트롤 collapsible — `(max-width: 640px)` 기본 접힘 + 1줄 요약 + 토글 (2026-05-05)
+- [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
 - [ ] 잔여: SidePanel 모바일 bottom sheet, 모바일 범례 floating chip, 슬라이더 햅틱 피드백
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
@@ -78,7 +79,11 @@ Neon 마이그레이션 + GHA cron 안정화(issue #1) 직후 시점. 다음 라
 
 - [ ] `gh secret set DATABASE_URL` 등 GitHub 시크릿이 ETL workflow에서 쓰는 것과 Vercel 환경변수 일관성 점검 (값이 동일한지 — Neon 비번 회전 시 두 곳 다 갱신 필요)
 - [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
-- [ ] 면책 고지 + 데이터 출처가 SEO/소셜 카드에도 노출되도록 `app/layout.tsx`의 `<meta>` 점검
+- [x] 면책 고지 + 데이터 출처가 SEO/소셜 카드에 노출 (2026-05-05) — `app/layout.tsx`에 `description` + `openGraph` + `twitter` metadata 추가 (PR #2)
+- [ ] **Preview deployment protection 끄기 또는 bypass token 발급** (2026-05-05 발견) — Vercel free plan은 Preview URL을 인증된 팀원만 접근 가능(`HTTP 401`). 외부 OG crawler(Telegram, Slack 등)가 익명 GET으로 미리보기 못 가져옴 → Preview에서 OG 카드 검증 불가. 옵션:
+  - (A) Vercel dashboard → Settings → Deployment Protection → "Vercel Authentication" 끄기 (가장 단순, 모든 Preview 익명 접근)
+  - (B) "Protection Bypass for Automation" 토큰 발급해 OG crawler용 헤더 첨부 (선택적)
+  - (C) 그대로 두고 Production에서만 OG 검증 (현재 패턴, 외부 공유 가치 적은 단계엔 충분)
 
 ---
 
