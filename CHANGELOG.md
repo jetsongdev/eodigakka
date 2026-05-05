@@ -10,6 +10,21 @@
 
 ---
 
+## [Unreleased] - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
+
+기존 흐름은 PR merge 후 별도 bump commit이 main에 추가 push되어 Vercel rebuild가 두 번 발생하고 Telegram 🎯 Production 알림도 2회 도착. 이번 변경으로 **bump이 PR head에 prebump 시점에 force-push로 미리 통합**되어 main에 squash 1 commit으로 들어가게 됨 → Vercel rebuild 1회·알림 1회·푸터 버전 즉시 갱신·CHANGELOG 본문 정확 모두 만족.
+
+### 변경
+- `.github/workflows/version-bump.yml` — 트리거 `pull_request: closed` → `[opened, synchronize, reopened, edited, closed]`. `prebump` job(PR head에 chore(release): commit force-push, 멱등성을 위해 기존 chore(release): 발견 시 reset HEAD~1 후 재계산) + `finalize` job(merge 후 main에서 tag만 push)으로 분리.
+- `.github/workflows/telegram-deploy-notify.yml` — CHANGELOG 추출을 `[Unreleased]` 고정 → 첫 `## [...]` 섹션 일반화. 헤더 라벨(`[v0.5.5]` / `[Unreleased]`)도 동적 추출해서 메시지 본문에 표시.
+- `CLAUDE.md` 「배포 워크플로」 — prebump 시점·1회 알림·finalize tag 분리 흐름 반영.
+
+### 결정
+- **prebump force-push 패턴**: `--force-with-lease`로 사용자 commit 손실 방지. GITHUB_TOKEN으로 push (PAT 사용 시 워크플로 자기 트리거 가능 → 무한 loop 회피). PR title 변경(edited 트리거) 시에도 reset + 재계산으로 멱등성 보장.
+- **finalize job 분리**: tag만 push이라 Vercel deployment_status 트리거 안 됨 → 추가 알림 발생 안 함. main의 push event는 squash merge로 이미 발생한 1회만.
+
+---
+
 ## [v0.5.4] - 2026-05-05 - Vercel Hobby 큐 stuck 진단 TIL + .md only build skip
 
 PR #6(v0.5.3) merge 직전 19분째 Queued 상태에서 발견된 운영 함정. Vercel Hobby plan은 account-wide 동시 빌드 1개라 같은 account의 다른 프로젝트(junggu-trash-map 등) stuck이 우리 빌드까지 막는다. dispatcher phantom hold 상태가 되면 visible한 in-progress 빌드가 없어도 새 enqueue가 진행 안 됨. 진단 + 복구 절차(All Projects 뷰 → 가장 오래된 phantom suspect cancel → 1~2분 관찰)를 TIL + 블로그 단편으로 박음.

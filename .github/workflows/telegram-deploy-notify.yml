@@ -40,13 +40,17 @@ jobs:
           ref: ${{ github.event.deployment.sha }}
           fetch-depth: 1
 
-      - name: Extract & format CHANGELOG [Unreleased]
+      - name: Extract & format CHANGELOG (first section)
         id: cl
         run: |
           set -euo pipefail
-          [ -f CHANGELOG.md ] || { echo "content=" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ -f CHANGELOG.md ] || { echo "content=" >> "$GITHUB_OUTPUT"; echo "label=" >> "$GITHUB_OUTPUT"; exit 0; }
 
-          UNREL=$(awk '/^## \[Unreleased\]/{f=1; next} /^## \[/{f=0} f' CHANGELOG.md | sed '/./,$!d')
+          # 첫 ## [...] 섹션의 본문 (헤더 제외, 다음 ## [ 직전까지)
+          UNREL=$(awk '/^## \[/{if(seen) exit; seen=1; next} seen' CHANGELOG.md | sed '/./,$!d')
+          # 첫 ## [...] 헤더에서 라벨 추출 ("[v0.5.4]" 또는 "[Unreleased]")
+          LABEL=$(sed -n 's/^## \(\[[^]]*\]\).*/\1/p' CHANGELOG.md | head -1)
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
           [ -z "$UNREL" ] && { echo "content=" >> "$GITHUB_OUTPUT"; exit 0; }
 
           # HTML escape (& < > 만)
@@ -89,6 +93,7 @@ jobs:
           PR_TITLE:         ${{ steps.pr.outputs.title }}
           PR_HEAD_REF:      ${{ steps.pr.outputs.head_ref }}
           CHANGELOG:        ${{ steps.cl.outputs.content }}
+          CHANGELOG_LABEL:  ${{ steps.cl.outputs.label }}
         run: |
           set -euo pipefail
           if [ -z "$TG_BOT_TOKEN" ] || [ -z "$TG_CHAT_ID" ]; then
@@ -145,7 +150,8 @@ jobs:
             MSG="$MSG"$'\n'"└ <code>$SHORT_SHA</code>"
           fi
           if [ -n "$CHANGELOG" ]; then
-            MSG="$MSG"$'\n\n'"📋 <b>[Unreleased]</b>"$'\n'"$CHANGELOG"
+            LABEL_E=$(esc "${CHANGELOG_LABEL:-[Unreleased]}")
+            MSG="$MSG"$'\n\n'"📋 <b>$LABEL_E</b>"$'\n'"$CHANGELOG"
           fi
 
           # inline keyboard (한 줄에 최대 3버튼) — DEPLOY_URL 비어있으면 Open 생략

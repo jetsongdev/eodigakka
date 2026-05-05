@@ -1,25 +1,35 @@
-# PR이 main에 merge되면 PR title의 Conventional Commit type을 보고 web/package.json
-# 버전을 자동 bump한다. 단, **CHANGELOG.md에 `## [Unreleased] - ...` 섹션이 있을 때만**
-# 동작 — PR 작성자가 명시적으로 release 의사를 표한 경우에만 bump.
-# 같은 PR에서 [Unreleased] entry를 [vX.Y.Z]로 치환하고 날짜를 KST 기준 merge일로 갱신.
-# tag도 함께 push.
+# PR이 main에 merge되기 전(PR open/push/title 변경 시점)에 PR head에 chore(release):
+# commit을 force-push로 미리 통합한다. 이러면 PR squash merge 시 main에 1 commit으로
+# 모든 변경 + bump이 한 번에 들어가 Vercel rebuild 1회·Telegram 알림 1회·푸터 버전
+# 즉시 갱신·Telegram CHANGELOG 본문 정확히 표시 모두 만족.
+#
+# 트리거 동작:
+#   pull_request.opened/synchronize/reopened/edited (PR 진행 중) → prebump job
+#   pull_request.closed (merged=true)                           → finalize job (tag만 push)
 #
 # bump 룰 (CLAUDE.md 「## 배포 워크플로」 참조):
-#   feat:                                                 → minor (0.5.1 → 0.6.0)
-#   fix: / chore: / docs: / ci: / refactor: / perf: / test: / style: / build: → patch (0.5.1 → 0.5.2)
-#   PR body에 "BREAKING CHANGE"                           → major (0.5.1 → 1.0.0)
+#   feat:                                                 → minor
+#   fix: / chore: / docs: / ci: / refactor: / perf: / test: / style: / build: → patch
+#   PR body에 "BREAKING CHANGE"                           → major
 #   매칭 안 됨                                              → patch (안전 fallback + ::warning)
 #
-# 자기 트리거 방지: bump commit은 직접 push이지 PR이 아니라 이 워크플로를 다시 발사하지 않음.
+# CHANGELOG [Unreleased] 없으면 prebump skip — release 의사 없는 PR(코멘트 정리 등)은
+# 자연 skip되어 bump commit 추가 안 됨.
 #
-# branch protection 통과: GITHUB_TOKEN으로는 main에 push 불가 → `RELEASE_PAT` 시크릿 필요
-# (fine-grained PAT, 이 repo의 contents:write + metadata:read).
+# 자기 트리거 회피: prebump의 force push는 GITHUB_TOKEN으로 → GitHub default로
+# 워크플로 재트리거 안 함. 무한 loop 없음.
+#
+# 멱등성: 이미 PR head에 chore(release): commit이 있으면 reset HEAD~1으로 원본 복구 후
+# 재계산. PR title 변경(edited 트리거)에도 안전.
+#
+# branch protection: prebump은 PR branch에만 push (main 영향 없음, GITHUB_TOKEN 충분).
+# finalize의 tag push만 RELEASE_PAT 사용 (일관성 유지).
 
-name: Version bump on PR merge
+name: Version bump on PR (pre-merge)
 
 on:
   pull_request:
-    types: [closed]
+    types: [opened, synchronize, reopened, edited, closed]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -29,54 +39,52 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
-  bump:
+  prebump:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main')
+      (
+        github.event.pull_request.merged != true &&
+        github.event.pull_request.base.ref == 'main' &&
+        github.event.action != 'closed'
+      )
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.RELEASE_PAT }}
-          fetch-depth: 0
-
       - name: PR 메타 (workflow_dispatch면 API로 조회)
         id: pr
         env:
-          # ${{ }} 치환은 bash 파싱 전이라 PR title/body가 user-controlled면 shell injection 위험.
-          # 모두 env로 hoist해서 "$VAR" expansion으로만 사용 → bash가 재파싱 안 함.
-          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUM_INPUT: ${{ inputs.pr_number }}
           PR_TITLE_EVENT: ${{ github.event.pull_request.title }}
           PR_BODY_EVENT: ${{ github.event.pull_request.body }}
           PR_NUM_EVENT: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF_EVENT: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             PR_NUM="$PR_NUM_INPUT"
-            # 복구용 manual 입력이라 numeric 검증 1회
             if ! [[ "$PR_NUM" =~ ^[0-9]+$ ]]; then
               echo "::error::pr_number must be numeric, got: $PR_NUM"
               exit 1
             fi
-            JSON=$(gh pr view "$PR_NUM" --json title,body,number)
+            JSON=$(gh pr view "$PR_NUM" --json title,body,number,headRefName)
+            HEAD_REF=$(echo "$JSON" | jq -r '.headRefName')
           else
             PR_NUM="$PR_NUM_EVENT"
+            HEAD_REF="$PR_HEAD_REF_EVENT"
             JSON=$(jq -n \
               --arg t "$PR_TITLE_EVENT" \
               --arg b "$PR_BODY_EVENT" \
               --arg n "$PR_NUM" \
               '{title: $t, body: $b, number: ($n|tonumber)}')
           fi
-          # 멀티라인 body는 GITHUB_OUTPUT delimiter로 처리
           {
             echo "number=$PR_NUM"
+            echo "head_ref=$HEAD_REF"
             echo "title<<EOF_TITLE"
             echo "$JSON" | jq -r '.title'
             echo "EOF_TITLE"
@@ -85,7 +93,23 @@ jobs:
             echo "EOF_BODY"
           } >> "$GITHUB_OUTPUT"
 
-      - name: CHANGELOG에 [Unreleased] 있는지 확인 (없으면 전체 skip)
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 기존 chore(release): commit이 있으면 reset (재계산 위해)
+        run: |
+          set -euo pipefail
+          LAST_MSG=$(git log -1 --format=%s)
+          if printf '%s' "$LAST_MSG" | grep -qE '^chore\(release\):'; then
+            echo "::notice::기존 chore(release): commit 발견 — reset HEAD~1로 원본 복구 후 재계산"
+            git reset --hard HEAD~1
+          fi
+
+      - name: CHANGELOG [Unreleased] 확인 (없으면 skip)
         id: gate
         run: |
           set -euo pipefail
@@ -94,7 +118,7 @@ jobs:
             echo "::notice::CHANGELOG에 [Unreleased] 발견 — bump 진행"
           else
             echo "has_unreleased=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CHANGELOG에 [Unreleased] 없음 — bump skip (release 의사 없는 PR로 간주)"
+            echo "::notice::CHANGELOG에 [Unreleased] 없음 — prebump skip (release 의사 없는 PR)"
           fi
 
       - name: bump type 결정
@@ -148,10 +172,6 @@ jobs:
           today = datetime.now(kst).strftime("%Y-%m-%d")
           path = "CHANGELOG.md"
           text = open(path, encoding="utf-8").read()
-          # 형식 우선순위:
-          #   "## [Unreleased] - YYYY-MM-DD - 제목" → "## [vX.Y.Z] - <today> - 제목"
-          #   "## [Unreleased] - 제목"               → "## [vX.Y.Z] - <today> - 제목"
-          #   "## [Unreleased]"                      → "## [vX.Y.Z] - <today>"
           patterns = [
               (r"^## \[Unreleased\] - \d{4}-\d{2}-\d{2}( - .+)?$",
                lambda m: f"## [v{version}] - {today}{m.group(1) or ''}"),
@@ -171,30 +191,61 @@ jobs:
           print(f"replaced [Unreleased] → [v{version}] - {today}")
           PY
 
-      - name: commit + tag + push
+      - name: chore(release): commit + force-push to PR head
         if: steps.gate.outputs.has_unreleased == 'true'
         env:
           NEW_VERSION: ${{ steps.version.outputs.new_version }}
           PR_NUM: ${{ steps.pr.outputs.number }}
-          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_HEAD_REF: ${{ steps.pr.outputs.head_ref }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/package.json CHANGELOG.md
           if git diff --cached --quiet; then
-            echo "::warning::no-op: staged 변경 없음. skip."
+            echo "::warning::staged 변경 없음 — skip"
             exit 0
           fi
-          git commit -m "chore(release): v$NEW_VERSION
+          git commit -m "chore(release): v$NEW_VERSION (PR #$PR_NUM)"
+          git push --force-with-lease origin "HEAD:$PR_HEAD_REF"
+          echo "::notice::pushed chore(release): v$NEW_VERSION → $PR_HEAD_REF"
 
-          PR #$PR_NUM: $PR_TITLE"
-          if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-            echo "::warning::tag v$NEW_VERSION 이미 존재 — tag step skip, commit만 push"
-            git push origin main
-          else
-            git tag "v$NEW_VERSION"
-            git push origin main
-            git push origin "v$NEW_VERSION"
+  finalize:
+    # PR merge 후 main의 latest commit에 tag만 push (Vercel rebuild 추가 안 일어남)
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PAT }}
+          fetch-depth: 1
+
+      - name: package.json version 읽기
+        id: ver
+        working-directory: web
+        run: |
+          set -euo pipefail
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "::notice::main의 web/package.json version: v$V"
+
+      - name: tag vX.Y.Z 만들기 + push (이미 있으면 skip)
+        env:
+          V: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git rev-parse "v$V" >/dev/null 2>&1; then
+            echo "::notice::tag v$V 이미 존재 — skip"
+            exit 0
           fi
-          echo "::notice::released v$NEW_VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v$V"
+          git push origin "v$V"
+          echo "::notice::pushed tag v$V"
