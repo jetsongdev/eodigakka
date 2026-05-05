@@ -15,9 +15,19 @@ LOCAL_DB="${LOCAL_DB:-eodigakka}"
 DUMP_FILE="${DUMP_FILE:-/tmp/eodigakka-dump.sql}"
 PSQL_IMAGE="${PSQL_IMAGE:-postgres:16}"
 
+# NEON_URL 미설정이면 etl/.env 자동 로드 (셸 escaping 문제 회피용 권장 경로)
+ENV_FILE="${ENV_FILE:-etl/.env}"
+if [ -z "${NEON_URL:-}" ] && [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 if [ -z "${NEON_URL:-}" ]; then
-  echo "ERROR: NEON_URL 환경변수 필요" >&2
-  echo "예: NEON_URL='postgresql://...' bash $0" >&2
+  echo "ERROR: NEON_URL 미설정." >&2
+  echo "  방법 A: etl/.env에 NEON_URL='postgresql://...' 한 줄 추가 (권장)" >&2
+  echo "  방법 B: NEON_URL='postgresql://...' bash $0" >&2
   exit 1
 fi
 
@@ -31,6 +41,7 @@ docker exec "$LOCAL_CONTAINER" pg_dump \
   --clean \
   --if-exists \
   | grep -vE '^(DROP|CREATE|COMMENT ON) EXTENSION' \
+  | grep -vE '\btiger\.|tiger_geocoder|topology\.' \
   > "$DUMP_FILE"
 
 echo "  dump size: $(wc -c < "$DUMP_FILE") bytes"
