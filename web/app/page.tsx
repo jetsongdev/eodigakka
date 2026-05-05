@@ -1216,18 +1216,27 @@ function SidePanel({
   return (
     <>
       {isNarrow && (
-        <div
+        <button
+          type="button"
           onClick={onClose}
-          aria-hidden
+          aria-label="동 상세 닫기"
           style={{
             position: 'fixed',
             inset: 0,
             background: 'rgba(0,0,0,0.3)',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
             zIndex: 2,
           }}
         />
       )}
-      <aside style={asideStyle} role="dialog" aria-label="동 상세">
+      <aside
+        style={asideStyle}
+        role={isNarrow ? 'dialog' : 'complementary'}
+        aria-label="동 상세"
+        aria-modal={isNarrow ? true : undefined}
+      >
         {isNarrow && (
           <div
             aria-hidden

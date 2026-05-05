@@ -16,11 +16,13 @@
 
 ### 추가
 - `useIsNarrow` 훅 — `matchMedia('(max-width: 640px)')` 구독, `useIsHoverCapable`과 동일 패턴
-- 모바일 백드롭 — 탭 시 닫기, `rgba(0,0,0,0.3)` overlay
+- 모바일 백드롭 — 탭 시 닫기, `rgba(0,0,0,0.3)` overlay. **`<button type="button" aria-label="동 상세 닫기">`로 렌더해 스크린리더·키보드 접근성 확보** (PR #10 Round 1 Copilot 피드백 반영, `aria-hidden`+`<div onClick>` 패턴은 a11y 트리에서 동작이 사라지는 문제)
 - 드래그 핸들 시각 bar (실제 제스처 미연결, 시트 affordance 힌트)
+- `docs/til/2026-05-05-aria-hidden-overlay-trap.md` — overlay backdrop a11y 함정(현상·원인·수정·교훈) 4단락 기록
 
 ### 변경
-- `web/app/page.tsx` `SidePanel` — `isNarrow` 분기로 레이아웃 스위칭, `role="dialog"` + `aria-label` 부여, 닫기 버튼 터치 타겟 확대(padding 4/8, fontSize 22)
+- `web/app/page.tsx` `SidePanel` — `isNarrow` 분기로 레이아웃 스위칭, 닫기 버튼 터치 타겟 확대(padding 4/8, fontSize 22)
+- `<aside>` role 시맨틱 분기: 모바일은 `role="dialog" + aria-modal="true"`(시트가 모달 다이얼로그처럼 동작), 데스크톱은 `role="complementary"`(사이드 정보 패널 시맨틱) — PR #10 Round 1 Copilot 피드백 반영
 
 ---
 
