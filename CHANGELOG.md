@@ -22,7 +22,7 @@
 
 ### 변경
 - `web/app/page.tsx` `SidePanel` — `isNarrow` 분기로 레이아웃 스위칭, 닫기 버튼 터치 타겟 확대(padding 4/8, fontSize 22)
-- `<aside>` role 시맨틱 분기: 모바일은 `role="dialog" + aria-modal="true"`(시트가 모달 다이얼로그처럼 동작), 데스크톱은 `role="complementary"`(사이드 정보 패널 시맨틱) — PR #10 Round 1 Copilot 피드백 반영
+- `<aside>` role을 `complementary`로 통일 — Round 1에 모바일만 `role="dialog" + aria-modal="true"`를 줬으나(Copilot 피드백 1차), focus trap 미구현 상태에서 modal 시맨틱만 선언하면 키보드 포커스 외부 이동이 가능해 거짓 신호 (Round 2 Copilot 피드백). 격하 + 데스크톱과 통일. 시트 본질이 인터랙션 모달이 아닌 정보 패널이라는 판단 — focus trap을 의미 있게 만들 인터랙티브 요소(입력 필드·확인 버튼) 없음.
 
 ---
 

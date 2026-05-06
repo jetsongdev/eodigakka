@@ -1,7 +1,7 @@
 # 07 — 모바일 SidePanel bottom sheet + a11y 분기 (PR #10 Round 1 후)
 
 - **날짜**: 2026-05-05
-- **git SHA**: e67376f (capture 시점, Round 1 a11y 수정 미커밋)
+- **git SHA**: 4a18442 (Round 1 a11y backdrop button + role 분기 적용본 — capture는 코드 변경을 dev 서버에 반영한 직후 진행)
 - **URL**: http://localhost:3004/
 - **뷰포트**: 데스크톱 1920×1080, 모바일 390×844
 - **시나리오**: 페이지 로드 → 지도 캔버스 중앙 클릭 → SidePanel(태평로1가, 미통과 동) 열림. 두 뷰포트 동일 동선.
@@ -22,13 +22,15 @@
 
 데스크톱 1920×1080은 회귀 없음. `position: absolute; top:12; right:60; width:360` 유지. 헤더 컨트롤 카드도 좌측 상단 그대로.
 
-### 3. a11y 분기 (PR #10 Round 1 Copilot 피드백 반영)
+### 3. a11y (PR #10 Round 1·2 Copilot 피드백 반영)
 
 화면엔 직접 안 보이지만 접근성 트리에 영향:
 
 - **백드롭은 `<button type="button" aria-label="동 상세 닫기">`** — 기존 `<div onClick aria-hidden>` 패턴은 스크린리더·키보드 사용자에겐 닫기 동작이 사라지는 함정 (TIL `2026-05-05-aria-hidden-overlay-trap`)
-- **`<aside>` role 분기**: 모바일 = `role="dialog" + aria-modal="true"` (시트가 모달 다이얼로그처럼 동작), 데스크톱 = `role="complementary"` (사이드 정보 패널 시맨틱)
-- 검증: a11y verify 스크립트 7/7 — `aside.role === 'dialog'/'complementary'`, `aria-modal === 'true'/null`, backdrop `<button>` 존재 여부 모두 확인
+- **`<aside>` role은 `complementary`로 통일** — 처음엔 모바일에 `role="dialog" + aria-modal="true"`를 줬으나(Round 1), focus trap 미구현 상태에서 modal 시맨틱만 선언하면 키보드 사용자에게 거짓 신호. Round 2에서 `aria-modal` 제거 + `role="complementary"`로 데스크톱과 통일. 시트 본질이 인터랙션 모달이 아닌 정보 패널이라는 판단.
+- 검증: a11y verify 스크립트 — backdrop `<button>` 존재 + `aside.role === 'complementary'`로 갱신.
+
+> 스크린샷은 Round 1 시점에 캡처됐지만 Round 2 격하는 ARIA 속성 변경이라 시각 변화 없음 — 시트·백드롭·드래그 핸들 모양 동일.
 
 ## 비교 (snapshot 03 → 07)
 

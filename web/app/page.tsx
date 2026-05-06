@@ -1233,9 +1233,8 @@ function SidePanel({
       )}
       <aside
         style={asideStyle}
-        role={isNarrow ? 'dialog' : 'complementary'}
+        role="complementary"
         aria-label="동 상세"
-        aria-modal={isNarrow ? true : undefined}
       >
         {isNarrow && (
           <div
