@@ -14,3 +14,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 04 | [Cash 듀얼 슬라이더 + 카세트 한 줄 컨트롤 (max 50억, ±10억 점프)](04-cash-slider-stepper/) | 2026-05-05 | c9315c8 | 1 (UX refinement) |
 | 05 | [전세 모드 색칠 — 79개 동 통과, 빨강(전세가율 80%+) 분포 노출](05-jeonse-mode-coloring/) | 2026-05-05 | c9315c8 | 1 (mode coverage) |
 | 06 | [Cash 슬라이더 +/- 칩 + 결과 카드 위계 + 데이터 출처 attribution](06-cash-delta-chip/) | 2026-05-05 | 4e02b3a | 1 (UX polish round 2) |
+| 07 | [모바일 SidePanel bottom sheet + a11y 분기 (PR #10)](07-mobile-bottom-sheet/) | 2026-05-05 | e67376f | 1 (mobile UX) |

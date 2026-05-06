@@ -20,7 +20,8 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] 사이드패널 분포 차트 + 매매·전세 동시 비교 — `/api/dong/.../complexes` `distributions[]` + SVG 박스플롯 (2026-05-05)
 - [x] 모바일 컨트롤 collapsible — `(max-width: 640px)` 기본 접힘 + 1줄 요약 + 토글 (2026-05-05)
 - [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
-- [ ] 잔여: SidePanel 모바일 bottom sheet, 모바일 범례 floating chip, 슬라이더 햅틱 피드백
+- [x] **SidePanel 모바일 bottom sheet** (2026-05-05) — `useIsNarrow` 훅 + isNarrow 분기로 `position: fixed; bottom: 0; max-height: 80vh`, 백드롭 탭으로 닫기, 드래그 핸들 시각 affordance 추가. 스와이프 제스처는 의존성 회피로 제외
+- [ ] 잔여: 모바일 범례 floating chip, 슬라이더 햅틱 피드백
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
@@ -191,7 +192,15 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - [ ] **평형 분포**: area_m2 히스토그램
   - [ ] **단지 카드 강화**: TOP5에 미니 sparkline + 평형/연식 라벨
   - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
-  - [ ] **모바일 UX**: bottom sheet (drawer) 패턴, swipe-down 닫기
+  - [ ] **최근 거래 매·전 분리 표시**: 현재 한 표에 `recent_transactions` 10건 섞여서 노출 (`mode === 'TRADE' ? '매' : '전'` 라벨 컬럼). 매매 최근 10건 / 전세 최근 10건 각각 두 섹션으로 분리
+    - `/api/dong/[bjd]/complexes` 응답 스키마 변경: `recent_transactions: TxRow[]` → `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` (기존 단일 배열 polyfill 유지 검토)
+    - SidePanel 렌더: 두 섹션 헤더 (`매매 최근 10건` / `전세 최근 10건`), 모드 라벨 컬럼 제거 가능
+    - 마이그레이션: API 응답 호환성 — 한 번에 둘 다 보내고 클라에서 split도 가능 (DB 한 번 쿼리, ORDER BY mode, contract_date DESC LIMIT)
+  - [ ] **최근 거래 더보기**: 10건 이후 페이지네이션. 시트 안에서 "더보기" 버튼 → 다음 10건 append. cursor는 `(contract_date, id)` 또는 `OFFSET` 기반
+    - API: `/api/dong/[bjd]/complexes?txCursor=<base64>&txMode=trade|jeonse` 또는 `?txOffset=10`
+    - 모바일 시트 안에서 자연스러운 무한 스크롤도 옵션 — 다만 시트 내부 스크롤 + 더보기 명시 클릭이 더 명확
+    - 트리거: 매·전 분리 task 완료 후
+  - [ ] **모바일 UX 잔여**: swipe-down 닫기 제스처 (bottom sheet 1차 — `useIsNarrow` 분기·백드롭·드래그 핸들 visual은 2026-05-05 완료)
 - [~] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — 컨트롤 collapsible만 1차 처리 완료 (2026-05-05)
   - [x] (B) 컨트롤 패널 collapsible — 기본 접힘 + 1줄 요약 + 토글, 사용자 토글 후 자동 동기화 stop. 모바일 뷰에서 지도 점유율 90% 이상 확보
   - [ ] (A) 범례 floating chip — 별도 시트 분리는 후속

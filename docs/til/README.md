@@ -18,6 +18,7 @@ eodigakka 프로젝트 진행하며 마주친 시행착오·해결 기록.
 ### Frontend
 - [Mapbox WebGL 컨텍스트 누수 — StrictMode + HMR이 합쳐지면 `new Map()` throw](2026-05-05-mapbox-webgl-strictmode.md)
 - [Mapbox 토큰 URL restriction은 wildcard 미지원 — Vercel preview를 위해 token 분리](2026-05-05-mapbox-token-url-restriction.md)
+- [`<div onClick aria-hidden>` overlay 함정 — 스크린리더·키보드에서 닫기 동작이 사라진다](2026-05-05-aria-hidden-overlay-trap.md)
 
 ---
 

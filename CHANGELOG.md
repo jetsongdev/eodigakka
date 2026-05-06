@@ -10,6 +10,22 @@
 
 ---
 
+## [v0.6.0] - 2026-05-06 - 모바일 SidePanel bottom sheet
+
+좁은 화면(`max-width: 640px`)에서 동 상세 패널을 우측 사이드 패널 대신 하단 시트로 슬라이드업. 기존 `position: absolute; right: 60; width: 360`은 375px 폰에서 화면을 거의 가로로 다 차지해 가독성·터치 타겟이 좁았다. 백드롭 탭으로 닫기 + 기존 × 버튼 + 상단 드래그 핸들 시각 affordance만 추가, 스와이프 제스처는 의존성 회피 차원에서 제외. 데스크톱 레이아웃은 그대로.
+
+### 추가
+- `useIsNarrow` 훅 — `matchMedia('(max-width: 640px)')` 구독, `useIsHoverCapable`과 동일 패턴
+- 모바일 백드롭 — 탭 시 닫기, `rgba(0,0,0,0.3)` overlay. **`<button type="button" aria-label="동 상세 닫기">`로 렌더해 스크린리더·키보드 접근성 확보** (PR #10 Round 1 Copilot 피드백 반영, `aria-hidden`+`<div onClick>` 패턴은 a11y 트리에서 동작이 사라지는 문제)
+- 드래그 핸들 시각 bar (실제 제스처 미연결, 시트 affordance 힌트)
+- `docs/til/2026-05-05-aria-hidden-overlay-trap.md` — overlay backdrop a11y 함정(현상·원인·수정·교훈) 4단락 기록
+
+### 변경
+- `web/app/page.tsx` `SidePanel` — `isNarrow` 분기로 레이아웃 스위칭, 닫기 버튼 터치 타겟 확대(padding 4/8, fontSize 22)
+- `<aside>` role을 `complementary`로 통일 — Round 1에 모바일만 `role="dialog" + aria-modal="true"`를 줬으나(Copilot 피드백 1차), focus trap 미구현 상태에서 modal 시맨틱만 선언하면 키보드 포커스 외부 이동이 가능해 거짓 신호 (Round 2 Copilot 피드백). 격하 + 데스크톱과 통일. 시트 본질이 인터랙션 모달이 아닌 정보 패널이라는 판단 — focus trap을 의미 있게 만들 인터랙티브 요소(입력 필드·확인 버튼) 없음.
+
+---
+
 ## [v0.5.6] - 2026-05-05 - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
 
 기존 흐름은 PR merge 후 별도 bump commit이 main에 추가 push되어 Vercel rebuild가 두 번 발생하고 Telegram 🎯 Production 알림도 2회 도착. 이번 변경으로 **bump이 PR head에 prebump 시점에 force-push로 미리 통합**되어 main에 squash 1 commit으로 들어가게 됨 → Vercel rebuild 1회·알림 1회·푸터 버전 즉시 갱신·CHANGELOG 본문 정확 모두 만족.

@@ -135,6 +135,20 @@ function useIsHoverCapable() {
   return capable;
 }
 
+function useIsNarrow() {
+  // SSR 시에는 false로 시작 — 데스크톱 가정. 마운트 후 matchMedia로 보정.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 640px)');
+    setNarrow(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -1167,9 +1181,24 @@ function SidePanel({
   onClose: () => void;
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
-  return (
-    <aside
-      style={{
+  const isNarrow = useIsNarrow();
+
+  const asideStyle: React.CSSProperties = isNarrow
+    ? {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        maxHeight: '80vh',
+        padding: '8px 16px 16px',
+        background: 'rgba(255,255,255,0.98)',
+        borderRadius: '16px 16px 0 0',
+        boxShadow: '0 -4px 20px rgba(0,0,0,0.18)',
+        zIndex: 3,
+        overflowY: 'auto',
+        fontSize: 13,
+      }
+    : {
         position: 'absolute',
         top: 12,
         right: 60,
@@ -1182,30 +1211,67 @@ function SidePanel({
         zIndex: 2,
         overflowY: 'auto',
         fontSize: 13,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>
-            {details?.bjd_name ?? bjdCode}
-          </div>
-          <div style={{ fontSize: 11, color: '#888' }}>{bjdCode}</div>
-        </div>
+      };
+
+  return (
+    <>
+      {isNarrow && (
         <button
           type="button"
           onClick={onClose}
-          aria-label="닫기"
+          aria-label="동 상세 닫기"
           style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.3)',
             border: 'none',
-            background: 'transparent',
-            fontSize: 18,
+            padding: 0,
             cursor: 'pointer',
-            color: '#666',
+            zIndex: 2,
           }}
-        >
-          ×
-        </button>
-      </div>
+        />
+      )}
+      <aside
+        style={asideStyle}
+        role="complementary"
+        aria-label="동 상세"
+      >
+        {isNarrow && (
+          <div
+            aria-hidden
+            style={{
+              width: 36,
+              height: 4,
+              borderRadius: 2,
+              background: '#d0d0d0',
+              margin: '4px auto 10px',
+            }}
+          />
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>
+              {details?.bjd_name ?? bjdCode}
+            </div>
+            <div style={{ fontSize: 11, color: '#888' }}>{bjdCode}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontSize: 22,
+              lineHeight: 1,
+              cursor: 'pointer',
+              color: '#666',
+              padding: '4px 8px',
+            }}
+          >
+            ×
+          </button>
+        </div>
 
       {dong && (
         <div
@@ -1290,7 +1356,8 @@ function SidePanel({
           {details.evidence}
         </div>
       )}
-    </aside>
+      </aside>
+    </>
   );
 }
 
