@@ -104,6 +104,17 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - (B) "Protection Bypass for Automation" 토큰 발급해 OG crawler용 헤더 첨부 (선택적)
   - (C) 그대로 두고 Production에서만 OG 검증 (현재 패턴, 외부 공유 가치 적은 단계엔 충분)
 
+### G. 사용자 피드백 채널 (2026-05-05 신규)
+
+**목적**: PWA 사용자가 버그·제안을 직접 보낼 수 있는 경로. "DB 쓰기는 ETL만" 원칙 유지하기 위해 폼은 외부 SaaS(Tally 또는 Google Form)에 호스팅하고, 제출 시 webhook → 기존 Telegram 봇으로 fan-out.
+
+- [ ] Tally(또는 Google Form) 폼 생성 — 필드: 카테고리(버그/제안/기타), 자유 서술, (선택) 연락처. captcha/honeypot 활성화
+- [ ] Tally webhook → Telegram bot API 연결. 직접 webhook이 안 되면 `/api/feedback-webhook` Next.js 라우트 한 줄 forward (env에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_FEEDBACK_CHAT_ID` 추가)
+- [ ] Telegram 토픽 신설(예: 💬 Feedback) — 기존 🚀 Preview / 🎯 Production과 분리
+- [ ] 푸터에 "피드백 보내기" 링크 추가 — Tally 폼 URL을 새 탭으로 열거나 `/feedback` 라우트에 `<iframe>` 임베드
+- [ ] 검증: 폼 제출 → 본인 Telegram 토픽 도착 → 내용·timestamp 확인. 스팸 1건 던져서 captcha·honeypot 동작 확인
+- [ ] CLAUDE.md 「외부 위임 규약」 또는 신규 섹션에 피드백 fan-out 경로 한 줄 추가 (Telegram 토픽 일람 동기화)
+
 ---
 
 ## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)
@@ -276,3 +287,42 @@ ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시�
 
 - [ ] 외곽 매매 (강원·충청·전라 일부 — 가족 거주 등 비통근 케이스)
 - [ ] 자체 MCP tool `find_affordable_dongs` (real-estate-mcp 의존 줄이기)
+
+---
+
+## Phase 5 — 자연어 쿼리 인터페이스 (검토 단계, 2026-05-05 신규)
+
+**목적**: "4억으로 신축 살 수 있는 동" 같은 자연어 쿼리 → LLM 파싱 → MCP tool 호출 → 지도 색칠·사이드패널 결과 노출. read-only 원칙·단정문 금지(조건 통과 N개 + Evidence) 그대로 유지.
+
+### 5.1 LLM 호스팅 모델 검토 (선행 spike — 결정 안 되면 5.2~5.4 진입 금지)
+
+- [ ] 옵션 비교 1pager 작성. 후보:
+  - **Local 추론** (Ollama / llama.cpp + Qwen2.5 7B·Llama 3.x 8B): 비용 0, Mac M-series 추론 속도 직접 측정 필요, 사용자 기기 의존하면 PWA 무리 → 서버 측 호스팅이라면 별도 인스턴스 필요
+  - **vLLM 셀프호스트**: 처리량 좋음, GPU 필수 (Vercel 비호환), 운영 복잡도·비용 큼
+  - **Vercel AI Gateway** (Vercel Knowledge Update 권장): `"provider/model"` 문자열로 멀티 프로바이더 + fallback, 토큰 비용, 가장 단순. AI SDK v6와 자연 통합
+  - **Anthropic / OpenAI 직접 API**: 간단, gateway 없을 때 fallback·관측 직접 구현
+- [ ] 평가 축: ① 쿼리 → MCP arg 파싱 정확도(샘플 쿼리 30개 정답률) ② P95 latency ③ 비용/100쿼리 ④ 운영 복잡도 ⑤ 데이터 프라이버시(쿼리에 위치 정보 포함 가능)
+- [ ] 결정 → SPEC.md ADR 추가 (예: ADR-009 자연어 쿼리 LLM 선정)
+
+### 5.2 백엔드 통합
+
+- [ ] real-estate-mcp를 백엔드에서 호출할 수단 결정 — (a) Python subprocess 직접 호출 (b) MCP HTTP gateway 거치기 (c) Phase 4의 자체 tool로 대체
+- [ ] LLM 시스템 프롬프트 작성·고정: "단정문 금지" + "결과는 항상 `조건 통과 N개 + Evidence` 포맷" + "추천·랭킹 표현 금지" — CLAUDE.md 청사진 9원리 그대로 주입
+- [ ] 쿼리 파싱 결과 → 기존 `parseAffordableQuery` 스키마로 변환 (구조화 출력 / tool calling 활용)
+
+### 5.3 UI 통합
+
+- [ ] 자연어 입력 박스 — 헤더 토글 또는 모바일 bottom sheet 진입점
+- [ ] LLM 파싱 결과를 기존 슬라이더/토글 상태에 동기화(투명한 변환), 폴리곤 색칠은 기존 affordable 경로 그대로 재사용
+- [ ] 사이드패널에 LLM 응답 본문 노출 + Evidence 포맷 클라이언트 측 검증(단정문 패턴 감지 시 경고 배너)
+
+### 5.4 운영
+
+- [ ] rate limit (IP·세션별 분당 N회) — Vercel KV 폐지됨, Marketplace의 Upstash Redis 등으로 구현
+- [ ] 비용 모니터링 + 일일/월 누적 알람 (Telegram 토픽)
+- [ ] 쿼리/응답 로그 (PII·정확한 좌표 제거) — 향후 정확도 회귀 평가용 데이터셋
+
+### 트리거 조건
+
+- Phase 1 임장 1회 검증 후 + "지도 슬라이더만으로는 부족" 판단이 나왔을 때만 진입
+- Phase 4 자체 MCP tool 또는 real-estate-mcp 백엔드 호출 경로 중 한쪽이 확보된 후
