@@ -96,7 +96,10 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 ### F. 보안·운영 (Vercel 셋업 후 즉시)
 
-- [ ] `gh secret set DATABASE_URL` 등 GitHub 시크릿이 ETL workflow에서 쓰는 것과 Vercel 환경변수 일관성 점검 (값이 동일한지 — Neon 비번 회전 시 두 곳 다 갱신 필요)
+- [x] GitHub 시크릿 ↔ Vercel 환경변수 일관성 점검 (2026-05-06) — `gh secret list` 6개(DATABASE_URL, RTMS_KEY, HEALTHCHECKS_PING_URL, RELEASE_PAT, TG_BOT_TOKEN, TG_CHAT_ID) × workflow `secrets.*` 참조 전수 매칭, Vercel env 3개(DATABASE_URL Prod+Preview, NEXT_PUBLIC_MAPBOX_TOKEN Prod·Preview 분리) 확인. drift 없음. 값 직접 비교는 양쪽 encrypted라 CLI 불가 → "한 번에 회전" 운영으로 방어.
+  - **유일한 dual-residence**: `DATABASE_URL` (GH ETL + Vercel Prod+Preview). Neon credential 회전 시 3곳 동시 갱신 강제.
+  - **G 섹션 도입 시 신규 dual-residence 예고**: `/api/feedback-webhook`가 Vercel에서 돌면 `TG_BOT_TOKEN`이 GH-only → GH+Vercel 양면이 됨. 봇 토큰 회전 절차에 양쪽 갱신 명시 필요.
+  - **Mapbox eodigakka-prod**: 커스텀 도메인 연결 시 Mapbox 콘솔 URL restriction에 새 도메인 화이트리스트 추가 필수.
 - [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
 - [x] 면책 고지 + 데이터 출처가 SEO/소셜 카드에 노출 (2026-05-05) — `app/layout.tsx`에 `description` + `openGraph` + `twitter` metadata 추가 (PR #2)
 - [ ] **Preview deployment protection 끄기 또는 bypass token 발급** (2026-05-05 발견) — Vercel free plan은 Preview URL을 인증된 팀원만 접근 가능(`HTTP 401`). 외부 OG crawler(Telegram, Slack 등)가 익명 GET으로 미리보기 못 가져옴 → Preview에서 OG 카드 검증 불가. 옵션:
