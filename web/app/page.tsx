@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Slider from '@radix-ui/react-slider';
 
 import type { AffordableDongResponse, HoverInfo } from '../components/MapView';
+import { parseAffordableQuery } from '../lib/filter';
 import type { QueryMode, SizeBucket } from '../lib/filter';
 
 const MapView = dynamic(() => import('../components/MapView'), {
@@ -76,6 +78,51 @@ const DEFAULT_QUERY: AffordableQueryState = {
 const CASH_MIN = 0;        // 0억
 const CASH_MAX = 500000;   // 50억 (강북 14구 매매 p99 26억, max 156억 outlier 1건은 cover하지 않음)
 const CASH_STEP = 5000;    // 5천만원 단위
+const URL_SYNC_DEBOUNCE_MS = 300;
+
+function hasAffordableQueryParams(params: URLSearchParams): boolean {
+  return ['mode', 'cash_min', 'cash_max', 'size'].some((key) => params.has(key));
+}
+
+function parseAffordableQueryState(params: URLSearchParams): AffordableQueryState {
+  if (!hasAffordableQueryParams(params)) {
+    return DEFAULT_QUERY;
+  }
+  try {
+    const parsed = parseAffordableQuery(params, {
+      mode: DEFAULT_QUERY.mode,
+      cashMin: DEFAULT_QUERY.cashMin,
+      cashMax: DEFAULT_QUERY.cashMax,
+      size: DEFAULT_QUERY.size,
+    });
+    return {
+      mode: parsed.mode,
+      cashMin: parsed.cashMin,
+      cashMax: parsed.cashMax,
+      size: parsed.size,
+    };
+  } catch {
+    return DEFAULT_QUERY;
+  }
+}
+
+function buildAffordableQueryString(query: AffordableQueryState): string {
+  const params = new URLSearchParams();
+  params.set('mode', query.mode);
+  params.set('cash_min', String(query.cashMin));
+  params.set('cash_max', String(query.cashMax));
+  params.set('size', query.size);
+  return params.toString();
+}
+
+function isSameAffordableQuery(a: AffordableQueryState, b: AffordableQueryState): boolean {
+  return (
+    a.mode === b.mode &&
+    a.cashMin === b.cashMin &&
+    a.cashMax === b.cashMax &&
+    a.size === b.size
+  );
+}
 
 // 1억(=10000만) 이상은 "4억" / "4.5억", 미만은 "5천만" 또는 "4500만". 0은 그대로 "0".
 function formatMan(man: number): string {
@@ -118,6 +165,17 @@ function useIsNarrow() {
 }
 
 export default function MapPage() {
+  return (
+    <Suspense fallback={<div style={{ width: '100vw', height: '100vh', background: '#fff' }} />}>
+      <MapPageContent />
+    </Suspense>
+  );
+}
+
+function MapPageContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [polygonCount, setPolygonCount] = useState<number | null>(null);
   const [affordable, setAffordable] = useState<AffordableResponse | null>(null);
@@ -125,7 +183,9 @@ export default function MapPage() {
   const [allDongs, setAllDongs] = useState<AffordableDongResponse[]>([]);
   const [matched, setMatched] = useState<AffordableDongResponse[]>([]);
   const [dataFreshness, setDataFreshness] = useState<string>('');
-  const [query, setQuery] = useState<AffordableQueryState>(DEFAULT_QUERY);
+  const [query, setQuery] = useState<AffordableQueryState>(() =>
+    parseAffordableQueryState(new URLSearchParams(searchParams.toString())),
+  );
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
@@ -140,12 +200,68 @@ export default function MapPage() {
   const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
   const prevMatchedRef = useRef<Set<string>>(new Set());
   const lastFilterCtxRef = useRef<{ mode: QueryMode; size: SizeOption } | null>(null);
+  const urlSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevQueryRef = useRef<AffordableQueryState | null>(null);
+
+  const searchParamsText = searchParams.toString();
 
   // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
   const affordableMapRef = useRef<Map<string, AffordableDongResponse>>(new Map());
   affordableMapRef.current = new Map(
     (affordable?.dongs ?? []).map((d) => [d.bjd_code, d]),
   );
+
+  useEffect(() => {
+    const nextQuery = parseAffordableQueryState(new URLSearchParams(searchParamsText));
+    setQuery((current) => (isSameAffordableQuery(current, nextQuery) ? current : nextQuery));
+  }, [searchParamsText]);
+
+  useEffect(() => {
+    const nextSearch = buildAffordableQueryString(query);
+    if (nextSearch === searchParamsText) {
+      prevQueryRef.current = query;
+      if (urlSyncTimeoutRef.current !== null) {
+        clearTimeout(urlSyncTimeoutRef.current);
+        urlSyncTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const prevQuery = prevQueryRef.current;
+    const cashOnlyChanged =
+      prevQuery !== null &&
+      prevQuery.mode === query.mode &&
+      prevQuery.size === query.size &&
+      (prevQuery.cashMin !== query.cashMin || prevQuery.cashMax !== query.cashMax);
+
+    const replaceUrl = () => {
+      router.replace(`${pathname}?${nextSearch}`);
+    };
+
+    if (urlSyncTimeoutRef.current !== null) {
+      clearTimeout(urlSyncTimeoutRef.current);
+      urlSyncTimeoutRef.current = null;
+    }
+
+    if (cashOnlyChanged) {
+      urlSyncTimeoutRef.current = setTimeout(() => {
+        replaceUrl();
+        urlSyncTimeoutRef.current = null;
+      }, URL_SYNC_DEBOUNCE_MS);
+    } else {
+      replaceUrl();
+    }
+
+    prevQueryRef.current = query;
+  }, [pathname, query, router, searchParamsText]);
+
+  useEffect(() => {
+    return () => {
+      if (urlSyncTimeoutRef.current !== null) {
+        clearTimeout(urlSyncTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
