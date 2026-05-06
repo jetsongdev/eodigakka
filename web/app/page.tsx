@@ -931,6 +931,7 @@ function Footer({
   // 두 줄 모두 작은 폰트로 가독성 해치지 않게.
   const version = process.env.NEXT_PUBLIC_APP_VERSION;
   const sha = process.env.NEXT_PUBLIC_GIT_SHA;
+  const feedbackFormUrl = process.env.NEXT_PUBLIC_FEEDBACK_FORM_URL;
   const versionLabel = [version && `v${version}`, sha && `#${sha}`].filter(Boolean).join(' ');
   return (
     <footer
@@ -996,6 +997,24 @@ function Footer({
             title="앱 버전 / git commit"
           >
             {versionLabel}
+          </span>
+        )}
+        {feedbackFormUrl && (
+          <span
+            style={{
+              marginLeft: 8,
+              paddingLeft: 8,
+              borderLeft: '1px solid rgba(0,0,0,0.12)',
+            }}
+          >
+            <a
+              href={feedbackFormUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ color: '#2d6da3', textDecoration: 'none' }}
+            >
+              피드백 보내기
+            </a>
           </span>
         )}
       </div>

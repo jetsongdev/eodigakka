@@ -278,6 +278,7 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 각 push 후 1분 내 Telegram 토픽 알림 도착해야 정상. 안 오면 `gh run list --workflow=telegram-deploy-notify.yml`로 워크플로 상태 확인. 정상 흐름:
 - **Preview**: PR push당 🚀 Preview 알림 1회 (bump이 미리 PR head에 통합된 상태로)
 - **Production**: PR merge당 🎯 Production 알림 1회 (해당 [vX.Y.Z] 섹션 본문 포함). finalize job의 tag push는 deployment_status 발사 안 해서 알림 발생 안 함.
+- **Topic 일람**: 🚀 Preview / 🎯 Production / 💬 Feedback
 
 ---
 

@@ -10,6 +10,15 @@
 
 ---
 
+## [Unreleased] - 사용자 피드백 채널 추가
+
+### 추가
+- Tally→Telegram webhook 라우트 `POST /api/feedback-webhook` 및 health-check `GET /api/feedback-webhook`
+- 푸터 `피드백 보내기` 외부 링크 (`NEXT_PUBLIC_FEEDBACK_FORM_URL` env로 조건부 노출)
+- `web/lib/feedback.ts` 유틸 함수 분리와 회귀 테스트 추가
+
+---
+
 ## [v0.5.6] - 2026-05-05 - pre-merge bump 통합 + Telegram 알림 1회·CHANGELOG 라벨 동적
 
 기존 흐름은 PR merge 후 별도 bump commit이 main에 추가 push되어 Vercel rebuild가 두 번 발생하고 Telegram 🎯 Production 알림도 2회 도착. 이번 변경으로 **bump이 PR head에 prebump 시점에 force-push로 미리 통합**되어 main에 squash 1 commit으로 들어가게 됨 → Vercel rebuild 1회·알림 1회·푸터 버전 즉시 갱신·CHANGELOG 본문 정확 모두 만족.

@@ -112,11 +112,11 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 **목적**: PWA 사용자가 버그·제안을 직접 보낼 수 있는 경로. "DB 쓰기는 ETL만" 원칙 유지하기 위해 폼은 외부 SaaS(Tally 또는 Google Form)에 호스팅하고, 제출 시 webhook → 기존 Telegram 봇으로 fan-out.
 
 - [ ] Tally(또는 Google Form) 폼 생성 — 필드: 카테고리(버그/제안/기타), 자유 서술, (선택) 연락처. captcha/honeypot 활성화
-- [ ] Tally webhook → Telegram bot API 연결. 직접 webhook이 안 되면 `/api/feedback-webhook` Next.js 라우트 한 줄 forward (env에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_FEEDBACK_CHAT_ID` 추가)
+- [x] Tally webhook → Telegram bot API 연결. 직접 webhook이 안 되면 `/api/feedback-webhook` Next.js 라우트 한 줄 forward (env에 `TELEGRAM_BOT_TOKEN`·`TELEGRAM_FEEDBACK_CHAT_ID` 추가)
 - [ ] Telegram 토픽 신설(예: 💬 Feedback) — 기존 🚀 Preview / 🎯 Production과 분리
-- [ ] 푸터에 "피드백 보내기" 링크 추가 — Tally 폼 URL을 새 탭으로 열거나 `/feedback` 라우트에 `<iframe>` 임베드
+- [x] 푸터에 "피드백 보내기" 링크 추가 — Tally 폼 URL을 새 탭으로 열거나 `/feedback` 라우트에 `<iframe>` 임베드
 - [ ] 검증: 폼 제출 → 본인 Telegram 토픽 도착 → 내용·timestamp 확인. 스팸 1건 던져서 captcha·honeypot 동작 확인
-- [ ] CLAUDE.md 「외부 위임 규약」 또는 신규 섹션에 피드백 fan-out 경로 한 줄 추가 (Telegram 토픽 일람 동기화)
+- [x] CLAUDE.md 「외부 위임 규약」 또는 신규 섹션에 피드백 fan-out 경로 한 줄 추가 (Telegram 토픽 일람 동기화)
 
 ---
 
