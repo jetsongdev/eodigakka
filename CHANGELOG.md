@@ -13,6 +13,7 @@
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
 ### 변경
+- /simplify 라운드 2 — 2-B feature-state 갱신 차분 적용(slider drag 시 467× wipe + N× 재투입 → |added|+|removed|개 호출) + selected 자연 보존(복원 로직 제거). NavigationControl reposition도 `mapLoaded` gate로 통일해 `map.once('load')` 누적 가능성 차단. e2e 회귀 가드 1줄 추가
 - Mapbox NavigationControl zoom 버튼 30×30 → 44×44 + 아이콘 26×26 — 모바일 터치 타겟 권장 사이즈, 모든 viewport 공통 (globals.css override)
 - 시트 열린 상태에서 mode/size 변경 시 selected 강조 풀리는 회귀 fix — `removeFeatureState` 직후 `prevSelectedBjdRef`로 selected 즉시 복원
 - iPad Mini portrait + PC fitBounds padding 보정

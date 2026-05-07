@@ -159,6 +159,7 @@ test('SidePanel — 비활성 탭 클릭 시 활성 탭과 헤더 mode가 함께
   const tradeTab = tablist.getByRole('tab', { name: /매매/ });
   const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
   const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
+  const aside = page.locator('aside[role="complementary"]');
 
   await jeonseTab.click();
 
@@ -167,6 +168,9 @@ test('SidePanel — 비활성 탭 클릭 시 활성 탭과 헤더 mode가 함께
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
     .toContain('전세 ·');
+  // 사이드패널이 닫히지 않고 같은 dong에 대해 유지 — 2-B 차분 적용으로 selected
+  // feature-state가 affordable refetch 후에도 보존되는 회귀 가드
+  await expect(aside).toBeVisible();
 });
 
 test('SidePanel — 헤더 mode 토글 시 default 탭이 따라간다', async ({ page }) => {

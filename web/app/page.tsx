@@ -380,26 +380,19 @@ export default function MapPage() {
     };
   }, []);
 
-  // 1-B) NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단
-  // hover-capable 여부로 분기. 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
+  // NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단.
+  // 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapLoaded) return;
     const position: 'top-right' | 'bottom-left' = isHoverCapable ? 'top-right' : 'bottom-left';
-    const apply = () => {
-      if (navControlRef.current) {
-        map.removeControl(navControlRef.current);
-      }
-      const control = new mapboxgl.NavigationControl({ showCompass: false });
-      map.addControl(control, position);
-      navControlRef.current = control;
-    };
-    if (map.loaded()) {
-      apply();
-    } else {
-      map.once('load', apply);
+    if (navControlRef.current) {
+      map.removeControl(navControlRef.current);
     }
-  }, [isHoverCapable]);
+    const control = new mapboxgl.NavigationControl({ showCompass: false });
+    map.addControl(control, position);
+    navControlRef.current = control;
+  }, [isHoverCapable, mapLoaded]);
 
   // 1-C) 선택된 동 polygon affordance — bjd_code promoteId 기반 feature-state 토글
   useEffect(() => {
@@ -539,20 +532,18 @@ export default function MapPage() {
         map.once('idle', tryApply);
         return;
       }
-      map.removeFeatureState({ source: POLYGONS_SOURCE_ID });
+      // 차분 적용 — prev에 있고 new에 없는 동의 color/matched만 해제. selected는
+      // 자연 보존(전체 wipe 회귀 대신). 슬라이더 drag 시 467개 wipe + N개 재투입을
+      // |added|+|removed|개 호출로 축소.
+      for (const code of prev) {
+        if (newSet.has(code)) continue;
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'color');
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'matched');
+      }
       for (const dong of matched) {
         map.setFeatureState(
           { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
           { color: dong.color, matched: true },
-        );
-      }
-      // removeFeatureState가 selected도 함께 지움 → 복원. selectedBjd 자체는 유지되므로
-      // 이 ref 값으로 즉시 다시 박는다 (1-C useEffect는 selectedBjd 변경에만 반응).
-      const sel = prevSelectedBjdRef.current;
-      if (sel) {
-        map.setFeatureState(
-          { source: POLYGONS_SOURCE_ID, id: sel },
-          { selected: true },
         );
       }
     };
