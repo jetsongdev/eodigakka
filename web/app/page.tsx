@@ -161,6 +161,7 @@ export default function MapPage() {
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
   const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
@@ -170,6 +171,7 @@ export default function MapPage() {
   // 다음 cash 변경 또는 mode/size 변경 시까지 유지(자동 fade-out 없음)
   const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
   const prevMatchedRef = useRef<Set<string>>(new Set());
+  const prevSelectedBjdRef = useRef<string | null>(null);
   const lastFilterCtxRef = useRef<{ mode: QueryMode; size: SizeOption } | null>(null);
 
   // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
@@ -269,6 +271,7 @@ export default function MapPage() {
             ],
             'fill-opacity': [
               'case',
+              ['==', ['feature-state', 'selected'], true], 0.85,
               ['==', ['feature-state', 'color'], 'deep_green_low'], 0.5,
               ['==', ['feature-state', 'matched'], true], 0.7,
               0.18,
@@ -281,8 +284,16 @@ export default function MapPage() {
           type: 'line',
           source: POLYGONS_SOURCE_ID,
           paint: {
-            'line-color': '#666',
-            'line-width': 0.4,
+            'line-color': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], '#0066ff',
+              '#666',
+            ],
+            'line-width': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], 3,
+              0.4,
+            ],
           },
         });
 
@@ -315,6 +326,7 @@ export default function MapPage() {
         });
 
         setPolygonCount(fc.features?.length ?? 0);
+        setMapLoaded(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -328,6 +340,7 @@ export default function MapPage() {
         // mapbox 내부 cleanup이 실패해도 useEffect cleanup은 throw하지 않는다
       }
       mapRef.current = null;
+      setMapLoaded(false);
     };
   }, []);
 
@@ -351,6 +364,27 @@ export default function MapPage() {
       map.once('load', apply);
     }
   }, [isHoverCapable]);
+
+  // 1-C) 선택된 동 polygon affordance — bjd_code promoteId 기반 feature-state 토글
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    if (!map.getSource(POLYGONS_SOURCE_ID)) return;
+
+    if (prevSelectedBjdRef.current) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: prevSelectedBjdRef.current },
+        { selected: false },
+      );
+    }
+    if (selectedBjd) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: selectedBjd },
+        { selected: true },
+      );
+    }
+    prevSelectedBjdRef.current = selectedBjd;
+  }, [selectedBjd, mapLoaded]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
