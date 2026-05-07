@@ -14,12 +14,10 @@ interface TopComplexRow {
   last_contract_date: string;
 }
 
-interface RecentTransactionRow {
-  mode: 'TRADE' | 'JEONSE';
+interface RecentTxRow {
   complex_name: string;
   area_m2: number;
   amount_man: number;
-  monthly_man: number;
   floor: number | null;
   contract_date: string;
 }
@@ -47,7 +45,14 @@ export async function GET(
     );
   }
 
-  const [dongNameResult, tradeTopResult, jeonseTopResult, recentResult, distributionResult] = await Promise.all([
+  const [
+    dongNameResult,
+    tradeTopResult,
+    jeonseTopResult,
+    recentTradesResult,
+    recentJeonseResult,
+    distributionResult,
+  ] = await Promise.all([
     sql<{ bjd_name: string | null }>`
       SELECT bjd_name
       FROM bjd_polygon
@@ -80,24 +85,23 @@ export async function GET(
       ORDER BY median_man DESC, tx_count_3m DESC
       LIMIT 5
     `.execute(db),
-    sql<RecentTransactionRow>`
+    sql<RecentTxRow>`
       SELECT
-        'TRADE'::text AS mode,
         complex_name,
         CAST(area_m2 AS DOUBLE PRECISION) AS area_m2,
         price_man AS amount_man,
-        0::int AS monthly_man,
         floor,
         contract_date::text AS contract_date
       FROM tx_apt_trade
       WHERE bjd_code = ${bjd}
-      UNION ALL
+      ORDER BY contract_date DESC
+      LIMIT 10
+    `.execute(db),
+    sql<RecentTxRow>`
       SELECT
-        'JEONSE'::text AS mode,
         complex_name,
         CAST(area_m2 AS DOUBLE PRECISION) AS area_m2,
         deposit_man AS amount_man,
-        monthly_man,
         floor,
         contract_date::text AS contract_date
       FROM tx_apt_rent
@@ -129,10 +133,23 @@ export async function GET(
   }
 
   const lastEvidenceDate =
-    recentResult.rows[0]?.contract_date ??
+    recentTradesResult.rows[0]?.contract_date ??
+    recentJeonseResult.rows[0]?.contract_date ??
     tradeTopResult.rows[0]?.last_contract_date ??
     jeonseTopResult.rows[0]?.last_contract_date ??
     new Date().toISOString().slice(0, 10);
+
+  const mapRecent = (row: RecentTxRow) => ({
+    complex_name: row.complex_name,
+    area_m2: Number(row.area_m2),
+    amount_man: row.amount_man,
+    floor: row.floor,
+    contract_date: row.contract_date,
+    evidence: `RTMS ${row.contract_date} 신고분`,
+  });
+
+  const recentTrades = recentTradesResult.rows.map(mapRecent);
+  const recentJeonse = recentJeonseResult.rows.map(mapRecent);
 
   return NextResponse.json({
     bjd_code: bjd,
@@ -149,16 +166,8 @@ export async function GET(
       tx_count_3m: row.tx_count_3m,
       evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
     })),
-    recent_transactions: recentResult.rows.map((row) => ({
-      mode: row.mode,
-      complex_name: row.complex_name,
-      area_m2: Number(row.area_m2),
-      amount_man: row.amount_man,
-      monthly_man: row.monthly_man,
-      floor: row.floor,
-      contract_date: row.contract_date,
-      evidence: `RTMS ${row.contract_date} 신고분`,
-    })),
+    recent_trades: recentTrades,
+    recent_jeonse: recentJeonse,
     distributions: distributionResult.rows.map((row) => ({
       mode: row.mode,
       size_bucket: row.size_bucket,
@@ -169,6 +178,10 @@ export async function GET(
       confidence: row.confidence,
     })),
     generated_at: new Date().toISOString(),
-    evidence: buildEvidence(recentResult.rows.length, tradeTopResult.rows.length + jeonseTopResult.rows.length, lastEvidenceDate),
+    evidence: buildEvidence(
+      recentTrades.length + recentJeonse.length,
+      tradeTopResult.rows.length + jeonseTopResult.rows.length,
+      lastEvidenceDate,
+    ),
   });
 }

@@ -51,11 +51,9 @@ interface TopComplex {
 }
 
 interface RecentTransaction {
-  mode: 'TRADE' | 'JEONSE';
   complex_name: string;
   area_m2: number;
   amount_man: number;
-  monthly_man: number;
   floor: number | null;
   contract_date: string;
   evidence: string;
@@ -76,7 +74,8 @@ interface DongDetailsResponse {
   bjd_name: string;
   trade_top5: TopComplex[];
   jeonse_top5: TopComplex[];
-  recent_transactions: RecentTransaction[];
+  recent_trades: RecentTransaction[];
+  recent_jeonse: RecentTransaction[];
   distributions: DongDistribution[];
   generated_at: string;
   evidence: string;
@@ -1273,24 +1272,7 @@ function SidePanel({
           </button>
         </div>
 
-      {dong && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: '6px 8px',
-            background: '#f4f6f4',
-            borderLeft: '3px solid #2d8a4f',
-            fontSize: 12,
-          }}
-        >
-          {dong.evidence}
-          <div style={{ marginTop: 2, color: '#555' }}>
-            중위 {(dong.median_man / 10000).toFixed(1)}억 · {dong.confidence}
-            {dong.median_build_year && ` · 중위 ${dong.median_build_year}년식`}
-            {dong.build_year_stddev != null && dong.build_year_stddev > 10 && ' ⚠️ 신구축 혼재'}
-          </div>
-        </div>
-      )}
+      {dong && <EvidenceCard dong={dong} mode={mode} />}
 
       {details && details.distributions.length > 0 && (
         <DistributionChart distributions={details.distributions} mode={mode} size={size} />
@@ -1316,40 +1298,18 @@ function SidePanel({
         </ol>
       )}
 
-      <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>최근 거래 10건</h4>
-      {loading && <div style={{ color: '#888' }}>로드 중...</div>}
-      {!loading && details && details.recent_transactions.length === 0 && (
-        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-      )}
-      {!loading && details && details.recent_transactions.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>모드</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {details.recent_transactions.map((tx, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
-                <td style={{ padding: '4px 2px', color: tx.mode === 'TRADE' ? '#2d8a4f' : '#777' }}>
-                  {tx.mode === 'TRADE' ? '매' : '전'}
-                </td>
-                <td style={{ padding: '4px 2px' }}>
-                  {tx.complex_name}
-                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                </td>
-                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                  {(tx.amount_man / 10000).toFixed(1)}억
-                </td>
-                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <RecentTxSection
+        title="매매 최근"
+        rows={details?.recent_trades}
+        loading={loading}
+        accent="#2d8a4f"
+      />
+      <RecentTxSection
+        title="전세 최근"
+        rows={details?.recent_jeonse}
+        loading={loading}
+        accent="#5577c8"
+      />
 
       {details && (
         <div style={{ marginTop: 12, fontSize: 11, color: '#888' }}>
@@ -1483,6 +1443,168 @@ function DistributionChart({
         })}
       </svg>
     </div>
+  );
+}
+
+type ChipTone = 'high' | 'low' | 'insufficient' | 'neutral' | 'warn';
+
+function Chip({ label, tone }: { label: string; tone: ChipTone }) {
+  const palette: Record<ChipTone, { bg: string; fg: string; border: string }> = {
+    high: { bg: '#e6f4e8', fg: '#1f6e3a', border: '#b6dcc1' },
+    low: { bg: '#fff4d6', fg: '#7a5a16', border: '#e6cc8a' },
+    insufficient: { bg: '#f0f0f0', fg: '#555', border: '#d0d0d0' },
+    neutral: { bg: '#eef2f7', fg: '#3a4a5d', border: '#c7d4e2' },
+    warn: { bg: '#fbeaea', fg: '#a13030', border: '#eebebe' },
+  };
+  const c = palette[tone];
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        background: c.bg,
+        color: c.fg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 600,
+        lineHeight: 1.45,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EvidenceCard({
+  dong,
+  mode,
+}: {
+  dong: AffordableDongResponse;
+  mode: QueryMode;
+}) {
+  const eok = dong.median_man / 10000;
+  const confLabel: Record<'high' | 'low' | 'insufficient', string> = {
+    high: '신뢰도 high',
+    low: '신뢰도 low',
+    insufficient: '표본 부족',
+  };
+  const showStddevWarn = dong.build_year_stddev != null && dong.build_year_stddev > 10;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '10px 12px',
+        background: '#f4f6f4',
+        borderLeft: '3px solid #2d8a4f',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: '#555',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
+        동 중위 ({mode === 'trade' ? '매매' : '전세'})
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 700,
+          color: '#1a1a1a',
+          lineHeight: 1.1,
+          marginTop: 2,
+        }}
+      >
+        {eok.toFixed(1)}억
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <Chip label={confLabel[dong.confidence]} tone={dong.confidence} />
+        {dong.median_build_year != null && (
+          <Chip label={`${dong.median_build_year}년식`} tone="neutral" />
+        )}
+        {showStddevWarn && <Chip label="⚠ 신구축 혼재" tone="warn" />}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: '#666', lineHeight: 1.5 }}>
+        {dong.evidence}
+      </div>
+    </div>
+  );
+}
+
+function RecentTxSection({
+  title,
+  rows,
+  loading,
+  accent,
+}: {
+  title: string;
+  rows: RecentTransaction[] | undefined;
+  loading: boolean;
+  accent: string;
+}) {
+  return (
+    <>
+      <h4
+        style={{
+          marginTop: 14,
+          marginBottom: 6,
+          fontSize: 13,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 6,
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            display: 'inline-block',
+            width: 8,
+            height: 8,
+            borderRadius: 2,
+            background: accent,
+          }}
+        />
+        <span>{title}</span>
+        {!loading && rows && rows.length > 0 && (
+          <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
+            {rows.length}건
+          </span>
+        )}
+      </h4>
+      {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
+      {!loading && (!rows || rows.length === 0) && (
+        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+      )}
+      {!loading && rows && rows.length > 0 && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((tx, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
+                <td style={{ padding: '4px 2px' }}>
+                  {tx.complex_name}
+                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                </td>
+                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                  {(tx.amount_man / 10000).toFixed(1)}억
+                </td>
+                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
   );
 }
 

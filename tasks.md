@@ -188,14 +188,11 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [~] **사이드패널 UI 개선** — 분포 차트만 1차 처리 완료, 나머지 항목은 후속 (2026-05-05)
   - [x] **분포 차트**: SVG 박스플롯 — `mv_dong_stats`의 p25/p50/p75 + 매매·전세 동시 (현재 모드 100%, 비교 모드 55% 투명)
   - [x] **매매·전세 동시 비교**: 분포 차트 안에 흡수 — 별도 mini-card는 만들지 않음
-  - [ ] **시각 위계**: 중위 가격을 가장 큰 숫자로 노출, confidence·연식 칩 형태로 분리
+  - [x] **시각 위계** (2026-05-07) — `EvidenceCard` 컴포넌트로 분리. 중위 가격 26pt 큰 숫자 + 라벨("동 중위 (매매/전세)") + confidence·연식·신구축혼재를 `Chip` (high=녹색/low=노랑/insufficient=회색/neutral=파랑/warn=빨강) 칩으로 분리. evidence는 작은 회색으로 하단 배치.
   - [ ] **평형 분포**: area_m2 히스토그램
   - [ ] **단지 카드 강화**: TOP5에 미니 sparkline + 평형/연식 라벨
   - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
-  - [ ] **최근 거래 매·전 분리 표시**: 현재 한 표에 `recent_transactions` 10건 섞여서 노출 (`mode === 'TRADE' ? '매' : '전'` 라벨 컬럼). 매매 최근 10건 / 전세 최근 10건 각각 두 섹션으로 분리
-    - `/api/dong/[bjd]/complexes` 응답 스키마 변경: `recent_transactions: TxRow[]` → `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` (기존 단일 배열 polyfill 유지 검토)
-    - SidePanel 렌더: 두 섹션 헤더 (`매매 최근 10건` / `전세 최근 10건`), 모드 라벨 컬럼 제거 가능
-    - 마이그레이션: API 응답 호환성 — 한 번에 둘 다 보내고 클라에서 split도 가능 (DB 한 번 쿼리, ORDER BY mode, contract_date DESC LIMIT)
+  - [x] **최근 거래 매·전 분리 표시** (2026-05-07) — API 응답: `recent_transactions[]` 단일 배열 폐기, `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` 두 배열로 분리. `route.ts`에서 두 별도 LIMIT 10 query (Promise.all 병렬). SidePanel `RecentTxSection` 컴포넌트로 추출, 녹색 dot(매매)/파란 dot(전세) 헤더 + 모드 라벨 컬럼 제거 (단지·평형 / 금액 / 일자 3컬럼). e2e 검증 추가(`api.spec.ts`).
   - [ ] **최근 거래 더보기**: 10건 이후 페이지네이션. 시트 안에서 "더보기" 버튼 → 다음 10건 append. cursor는 `(contract_date, id)` 또는 `OFFSET` 기반
     - API: `/api/dong/[bjd]/complexes?txCursor=<base64>&txMode=trade|jeonse` 또는 `?txOffset=10`
     - 모바일 시트 안에서 자연스러운 무한 스크롤도 옵션 — 다만 시트 내부 스크롤 + 더보기 명시 클릭이 더 명확

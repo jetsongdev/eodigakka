@@ -10,6 +10,21 @@
 
 ---
 
+## [Unreleased] - SidePanel 정보구조 — 매·전 분리 + 시각 위계
+
+동 상세 패널을 사용자 의사결정 흐름에 맞춰 재배치. (1) Evidence 카드의 핵심 숫자(중위 가격)를 26pt 큰 숫자로 끌어올리고 신뢰도·연식·신구축 혼재를 색 의미가 있는 칩으로 분리해 한눈 파악성 강화. (2) "최근 거래 10건" 단일 표(매·전 섞여 모드 라벨 컬럼 필요)를 매매·전세 두 섹션으로 분리, 각각 LIMIT 10으로 확장(총 최대 20건). API 응답 스키마 `recent_transactions[]` → `recent_trades[]` + `recent_jeonse[]`로 변경. 외부 consumer 없음, polyfill 생략.
+
+### 추가
+- `EvidenceCard` 컴포넌트 — 동 중위 가격 큰 숫자 + 라벨 + 칩 묶음 + evidence 텍스트
+- `Chip` 컴포넌트 (5 tone: high/low/insufficient/neutral/warn) — confidence별 의미 색상 일관성
+- `RecentTxSection` 컴포넌트 — 매매(녹색 dot)/전세(파란 dot) 섹션 헤더 + 거래 표
+- `tests/e2e/api.spec.ts` — `/api/dong/:bjd/complexes` 매·전 분리 응답 스키마 검증
+
+### 변경
+- `web/app/api/dong/[bjd]/complexes/route.ts` — 단일 UNION ALL ORDER BY LIMIT 10 query를 매·전 각각 LIMIT 10 두 query로 분리(Promise.all 병렬). `mode` 컬럼 응답에서 제거
+- `web/app/page.tsx` `DongDetailsResponse` interface — `recent_transactions` 제거, `recent_trades` + `recent_jeonse` 추가. `RecentTransaction`에서 `mode`·`monthly_man` 필드 제거
+- SidePanel evidence 박스 — 인라인 텍스트("중위 N억 · confidence · N년식 · ⚠️신구축 혼재")에서 시각 위계 카드로 교체
+
 ## [v0.6.0] - 2026-05-06 - 모바일 SidePanel bottom sheet
 
 좁은 화면(`max-width: 640px`)에서 동 상세 패널을 우측 사이드 패널 대신 하단 시트로 슬라이드업. 기존 `position: absolute; right: 60; width: 360`은 375px 폰에서 화면을 거의 가로로 다 차지해 가독성·터치 타겟이 좁았다. 백드롭 탭으로 닫기 + 기존 × 버튼 + 상단 드래그 핸들 시각 affordance만 추가, 스와이프 제스처는 의존성 회피 차원에서 제외. 데스크톱 레이아웃은 그대로.
