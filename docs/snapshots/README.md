@@ -17,3 +17,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 07 | [모바일 SidePanel bottom sheet + a11y 분기 (PR #10)](07-mobile-bottom-sheet/) | 2026-05-05 | e67376f | 1 (mobile UX) |
 | 08 | [SidePanel 탭 UI + 시각 위계 + 시트 투명도 (PR #12)](08-sidepanel-tabs/) | 2026-05-07 | 8a99de8 | 1 (sidepanel info hierarchy) |
 | 09 | [모바일 zoom 좌하단 + 선택된 동 폴리곤 강조 (PR #12)](09-zoom-and-selected-affordance/) | 2026-05-07 | ff60ff2 | 1 (mobile UX + selected affordance) |
+| 10 | [fitBounds 시트 가림 bug evidence (iPad Mini + PC)](10-fitbounds-bug-ipad-mini/) | 2026-05-07 | 6718594 | 1 (bug evidence) |
