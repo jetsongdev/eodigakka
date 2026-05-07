@@ -22,6 +22,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
 - [x] **SidePanel 모바일 bottom sheet** (2026-05-05) — `useIsNarrow` 훅 + isNarrow 분기로 `position: fixed; bottom: 0; max-height: 80vh`, 백드롭 탭으로 닫기, 드래그 핸들 시각 affordance 추가. 스와이프 제스처는 의존성 회피로 제외
 - [ ] 잔여: 모바일 범례 floating chip, 슬라이더 햅틱 피드백
+- [x] **확대/축소 버튼 크기 키우기** (2026-05-08) — Mapbox `NavigationControl`의 기본 30×30 → 44×44(권장 터치 타겟)로 키움. `web/app/globals.css`에 `.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in/out` width/height + 아이콘 background-size 26×26 override. 모든 viewport 공통 — 데스크톱도 hit area 확대로 사용성 ↑.
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)

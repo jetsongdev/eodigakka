@@ -13,6 +13,7 @@
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
 ### 변경
+- Mapbox NavigationControl zoom 버튼 30×30 → 44×44 + 아이콘 26×26 — 모바일 터치 타겟 권장 사이즈, 모든 viewport 공통 (globals.css override)
 - 시트 열린 상태에서 mode/size 변경 시 selected 강조 풀리는 회귀 fix — `removeFeatureState` 직후 `prevSelectedBjdRef`로 selected 즉시 복원
 - iPad Mini portrait + PC fitBounds padding 보정
 - 선택된 폴리곤 외곽선 강조(line-width: 3, #0066ff) 및 fill-opacity 상향(0.85)으로 selected affordance 추가
