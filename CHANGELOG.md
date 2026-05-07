@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 선택된 폴리곤 시각 강조
+## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조
 
 ### 변경
 - 선택된 폴리곤 외곽선 강조(line-width: 3, #0066ff) 및 fill-opacity 상향(0.85)으로 selected affordance 추가
