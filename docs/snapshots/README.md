@@ -16,3 +16,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 06 | [Cash 슬라이더 +/- 칩 + 결과 카드 위계 + 데이터 출처 attribution](06-cash-delta-chip/) | 2026-05-05 | 4e02b3a | 1 (UX polish round 2) |
 | 07 | [모바일 SidePanel bottom sheet + a11y 분기 (PR #10)](07-mobile-bottom-sheet/) | 2026-05-05 | e67376f | 1 (mobile UX) |
 | 08 | [SidePanel 탭 UI + 시각 위계 + 시트 투명도 (PR #12)](08-sidepanel-tabs/) | 2026-05-07 | 8a99de8 | 1 (sidepanel info hierarchy) |
+| 09 | [모바일 zoom 좌하단 + 선택된 동 폴리곤 강조 (PR #12)](09-zoom-and-selected-affordance/) | 2026-05-07 | ff60ff2 | 1 (mobile UX + selected affordance) |
