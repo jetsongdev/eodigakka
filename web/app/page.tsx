@@ -120,6 +120,35 @@ function formatMan(man: number): string {
   return `${eok.toFixed(1)}억`;
 }
 
+// 폴리곤 geometry에서 [[minLng, minLat], [maxLng, maxLat]] 계산. Polygon/MultiPolygon 지원.
+// querySourceFeatures는 viewport 안만 반환해서 전 영역 커버 못함 — 캐시한 GeoJSON에서 직접 계산.
+function computePolygonBbox(
+  geom: GeoJSON.Geometry,
+): [[number, number], [number, number]] | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (coord: number[]) => {
+    if (coord[0] < minX) minX = coord[0];
+    if (coord[0] > maxX) maxX = coord[0];
+    if (coord[1] < minY) minY = coord[1];
+    if (coord[1] > maxY) maxY = coord[1];
+  };
+  if (geom.type === 'Polygon') {
+    for (const ring of geom.coordinates) for (const c of ring) visit(c);
+  } else if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates) for (const ring of poly) for (const c of ring) visit(c);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(minX)) return null;
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ];
+}
+
 function useIsHoverCapable() {
   // SSR 시에는 true로 시작 — 데스크톱 가정. 마운트 후 matchMedia로 보정.
   const [capable, setCapable] = useState(true);
@@ -164,7 +193,13 @@ export default function MapPage() {
   const [mapLoaded, setMapLoaded] = useState(false);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
+  // SidePanel이 bottom sheet인지 side panel인지 — fitBounds padding 분기에 사용
+  const isNarrow = useIsNarrow();
   const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
+  // 폴리곤 GeoJSON 캐시 — 선택된 동 bbox 계산에 사용 (querySourceFeatures는 viewport 안만 반환해서 신뢰 불가)
+  const polygonsGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  // 동 선택 직전 카메라 — 시트 닫을 때 복귀
+  const originalCameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
@@ -245,7 +280,8 @@ export default function MapPage() {
       try {
         const res = await fetch('/api/polygons');
         if (!res.ok) throw new Error(`/api/polygons HTTP ${res.status}`);
-        const fc = await res.json();
+        const fc = (await res.json()) as GeoJSON.FeatureCollection;
+        polygonsGeoJsonRef.current = fc;
 
         map.addSource(POLYGONS_SOURCE_ID, {
           type: 'geojson',
@@ -385,6 +421,37 @@ export default function MapPage() {
     }
     prevSelectedBjdRef.current = selectedBjd;
   }, [selectedBjd, mapLoaded]);
+
+  // 1-D) 선택 시 폴리곤으로 fitBounds, 닫을 때 원래 카메라로 복귀
+  // padding으로 시트 영역 회피 — 모바일은 하단(시트 max 80vh), 데스크톱은 우측(side panel ~420px)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (selectedBjd) {
+      // 첫 선택일 때만 카메라 저장 (연속 선택 시 원래 위치 유지)
+      if (!originalCameraRef.current) {
+        const c = map.getCenter();
+        originalCameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
+      }
+      const fc = polygonsGeoJsonRef.current;
+      const feature = fc?.features.find((f) => f.properties?.bjd_code === selectedBjd);
+      const bbox = feature ? computePolygonBbox(feature.geometry) : null;
+      if (!bbox) return;
+
+      const container = map.getContainer();
+      const h = container.clientHeight;
+      const padding = isNarrow
+        ? { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 }
+        : { top: 80, right: 440, bottom: 80, left: 80 };
+
+      map.fitBounds(bbox, { padding, duration: 700, maxZoom: 14 });
+    } else if (originalCameraRef.current) {
+      const { center, zoom } = originalCameraRef.current;
+      map.flyTo({ center, zoom, duration: 700 });
+      originalCameraRef.current = null;
+    }
+  }, [selectedBjd, mapLoaded, isNarrow]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
