@@ -10,20 +10,21 @@
 
 ---
 
-## [Unreleased] - SidePanel 정보구조 — 매·전 분리 + 시각 위계
+## [Unreleased] - SidePanel 정보구조 — 매·전 탭 + 시각 위계 + 시트 투명도
 
-동 상세 패널을 사용자 의사결정 흐름에 맞춰 재배치. (1) Evidence 카드의 핵심 숫자(중위 가격)를 26pt 큰 숫자로 끌어올리고 신뢰도·연식·신구축 혼재를 색 의미가 있는 칩으로 분리해 한눈 파악성 강화. (2) "최근 거래 10건" 단일 표(매·전 섞여 모드 라벨 컬럼 필요)를 매매·전세 두 섹션으로 분리, 각각 LIMIT 10으로 확장(총 최대 20건). API 응답 스키마 `recent_transactions[]` → `recent_trades[]` + `recent_jeonse[]`로 변경. 외부 consumer 없음, polyfill 생략.
+동 상세 패널을 사용자 의사결정 흐름에 맞춰 재배치. (1) Evidence 카드의 핵심 숫자(중위 가격)를 26pt 큰 숫자로 끌어올리고 신뢰도·연식·신구축 혼재를 색 의미가 있는 칩으로 분리해 한눈 파악성 강화. (2) "최근 거래 10건" 단일 표(매·전 섞여 모드 라벨 컬럼 필요)를 매매·전세 **탭 UI**로 분리, 각 탭당 LIMIT 10으로 확장(총 최대 20건). 탭 default는 헤더 mode와 동기화. API 응답 스키마 `recent_transactions[]` → `recent_trades[]` + `recent_jeonse[]`로 변경. 외부 consumer 없음, polyfill 생략. (3) 사이드패널 배경 0.97→0.86(데스크톱)/0.98→0.88(모바일)로 살짝 투명 + `backdropFilter: blur(6px)`로 뒤 지도가 살짝 비치되 가독성은 blur로 보존.
 
 ### 추가
 - `EvidenceCard` 컴포넌트 — 동 중위 가격 큰 숫자 + 라벨 + 칩 묶음 + evidence 텍스트
 - `Chip` 컴포넌트 (5 tone: high/low/insufficient/neutral/warn) — confidence별 의미 색상 일관성
-- `RecentTxSection` 컴포넌트 — 매매(녹색 dot)/전세(파란 dot) 섹션 헤더 + 거래 표
+- `RecentTxTabs` + `RecentTabButton` 컴포넌트 — `role=tablist`/`role=tab` a11y. 활성 탭 underline은 매매=녹색(#2d8a4f) / 전세=파랑(#5577c8). 헤더 mode 토글 시 `useEffect([defaultTab])`로 활성 탭 자동 동기화
 - `tests/e2e/api.spec.ts` — `/api/dong/:bjd/complexes` 매·전 분리 응답 스키마 검증
 
 ### 변경
 - `web/app/api/dong/[bjd]/complexes/route.ts` — 단일 UNION ALL ORDER BY LIMIT 10 query를 매·전 각각 LIMIT 10 두 query로 분리(Promise.all 병렬). `mode` 컬럼 응답에서 제거
 - `web/app/page.tsx` `DongDetailsResponse` interface — `recent_transactions` 제거, `recent_trades` + `recent_jeonse` 추가. `RecentTransaction`에서 `mode`·`monthly_man` 필드 제거
 - SidePanel evidence 박스 — 인라인 텍스트("중위 N억 · confidence · N년식 · ⚠️신구축 혼재")에서 시각 위계 카드로 교체
+- SidePanel `asideStyle` background — 0.97/0.98 단색 → 0.86/0.88 + `backdropFilter: blur(6px)`. 탭 콘텐츠 영역은 `rgba(255,255,255,0.55)` 한층 더 투명한 시트
 
 ## [v0.6.0] - 2026-05-06 - 모바일 SidePanel bottom sheet
 

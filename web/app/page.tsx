@@ -1190,7 +1190,9 @@ function SidePanel({
         right: 0,
         maxHeight: '80vh',
         padding: '8px 16px 16px',
-        background: 'rgba(255,255,255,0.98)',
+        background: 'rgba(255,255,255,0.88)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: '16px 16px 0 0',
         boxShadow: '0 -4px 20px rgba(0,0,0,0.18)',
         zIndex: 3,
@@ -1204,7 +1206,9 @@ function SidePanel({
         bottom: 12,
         width: 360,
         padding: '14px 16px',
-        background: 'rgba(255,255,255,0.97)',
+        background: 'rgba(255,255,255,0.86)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: 8,
         boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
         zIndex: 2,
@@ -1298,17 +1302,11 @@ function SidePanel({
         </ol>
       )}
 
-      <RecentTxSection
-        title="매매 최근"
-        rows={details?.recent_trades}
+      <RecentTxTabs
+        trades={details?.recent_trades}
+        jeonse={details?.recent_jeonse}
         loading={loading}
-        accent="#2d8a4f"
-      />
-      <RecentTxSection
-        title="전세 최근"
-        rows={details?.recent_jeonse}
-        loading={loading}
-        accent="#5577c8"
+        defaultTab={mode === 'trade' ? 'trade' : 'jeonse'}
       />
 
       {details && (
@@ -1535,76 +1533,152 @@ function EvidenceCard({
   );
 }
 
-function RecentTxSection({
-  title,
-  rows,
+type RecentTabKey = 'trade' | 'jeonse';
+
+const TAB_ACCENT: Record<RecentTabKey, string> = {
+  trade: '#2d8a4f',
+  jeonse: '#5577c8',
+};
+
+function RecentTxTabs({
+  trades,
+  jeonse,
   loading,
-  accent,
+  defaultTab,
 }: {
-  title: string;
-  rows: RecentTransaction[] | undefined;
+  trades: RecentTransaction[] | undefined;
+  jeonse: RecentTransaction[] | undefined;
   loading: boolean;
-  accent: string;
+  defaultTab: RecentTabKey;
 }) {
+  const [activeTab, setActiveTab] = useState<RecentTabKey>(defaultTab);
+
+  // 헤더 mode가 바뀌면 탭도 따라 변경 (사용자가 명시적으로 다른 탭 누른 직후라도
+  // mode 토글은 의도적인 컨텍스트 전환이므로 동기화)
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
+
+  const rows = activeTab === 'trade' ? trades : jeonse;
+
   return (
-    <>
-      <h4
+    <div style={{ marginTop: 14 }}>
+      <div
+        role="tablist"
+        aria-label="최근 거래"
         style={{
-          marginTop: 14,
-          marginBottom: 6,
-          fontSize: 13,
           display: 'flex',
-          alignItems: 'baseline',
-          gap: 6,
+          gap: 0,
+          borderBottom: '1px solid #d8d8d8',
+          marginBottom: 8,
         }}
       >
-        <span
-          aria-hidden
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: 2,
-            background: accent,
-          }}
+        <RecentTabButton
+          tab="trade"
+          label="매매"
+          active={activeTab === 'trade'}
+          loading={loading}
+          count={trades?.length ?? 0}
+          onSelect={setActiveTab}
         />
-        <span>{title}</span>
-        {!loading && rows && rows.length > 0 && (
-          <span style={{ fontSize: 11, color: '#888', fontWeight: 400 }}>
-            {rows.length}건
-          </span>
+        <RecentTabButton
+          tab="jeonse"
+          label="전세"
+          active={activeTab === 'jeonse'}
+          loading={loading}
+          count={jeonse?.length ?? 0}
+          onSelect={setActiveTab}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        aria-label={`최근 ${activeTab === 'trade' ? '매매' : '전세'}`}
+        style={{
+          background: 'rgba(255,255,255,0.55)',
+          padding: '8px 10px',
+          borderRadius: 6,
+        }}
+      >
+        {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
+        {!loading && (!rows || rows.length === 0) && (
+          <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
         )}
-      </h4>
-      {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
-      {!loading && (!rows || rows.length === 0) && (
-        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-      )}
-      {!loading && rows && rows.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((tx, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
-                <td style={{ padding: '4px 2px' }}>
-                  {tx.complex_name}
-                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                </td>
-                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                  {(tx.amount_man / 10000).toFixed(1)}억
-                </td>
-                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+        {!loading && rows && rows.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((tx, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <td style={{ padding: '4px 2px' }}>
+                    {tx.complex_name}
+                    <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                  </td>
+                  <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                    {(tx.amount_man / 10000).toFixed(1)}억
+                  </td>
+                  <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentTabButton({
+  tab,
+  label,
+  active,
+  loading,
+  count,
+  onSelect,
+}: {
+  tab: RecentTabKey;
+  label: string;
+  active: boolean;
+  loading: boolean;
+  count: number;
+  onSelect: (tab: RecentTabKey) => void;
+}) {
+  const accent = TAB_ACCENT[tab];
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => onSelect(tab)}
+      style={{
+        flex: 1,
+        padding: '8px 10px',
+        border: 'none',
+        borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
+        background: 'transparent',
+        color: active ? accent : '#666',
+        fontWeight: active ? 700 : 500,
+        fontSize: 13,
+        cursor: 'pointer',
+        marginBottom: -1,
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'center',
+        gap: 5,
+      }}
+    >
+      <span>{label}</span>
+      {!loading && (
+        <span style={{ fontWeight: 400, fontSize: 11, color: active ? '#666' : '#999' }}>
+          {count}건
+        </span>
       )}
-    </>
+    </button>
   );
 }
 
