@@ -132,12 +132,16 @@ export async function GET(
     );
   }
 
+  const candidateDates = [
+    recentTradesResult.rows[0]?.contract_date,
+    recentJeonseResult.rows[0]?.contract_date,
+    tradeTopResult.rows[0]?.last_contract_date,
+    jeonseTopResult.rows[0]?.last_contract_date,
+  ].filter((d): d is string => Boolean(d));
   const lastEvidenceDate =
-    recentTradesResult.rows[0]?.contract_date ??
-    recentJeonseResult.rows[0]?.contract_date ??
-    tradeTopResult.rows[0]?.last_contract_date ??
-    jeonseTopResult.rows[0]?.last_contract_date ??
-    new Date().toISOString().slice(0, 10);
+    candidateDates.length > 0
+      ? candidateDates.sort().at(-1)!
+      : new Date().toISOString().slice(0, 10);
 
   const mapRecent = (row: RecentTxRow) => ({
     complex_name: row.complex_name,

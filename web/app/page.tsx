@@ -1303,10 +1303,11 @@ function SidePanel({
       )}
 
       <RecentTxTabs
+        key={mode}
         trades={details?.recent_trades}
         jeonse={details?.recent_jeonse}
         loading={loading}
-        defaultTab={mode === 'trade' ? 'trade' : 'jeonse'}
+        defaultTab={mode}
       />
 
       {details && (
@@ -1446,15 +1447,22 @@ function DistributionChart({
 
 type ChipTone = 'high' | 'low' | 'insufficient' | 'neutral' | 'warn';
 
+const CHIP_PALETTE: Record<ChipTone, { bg: string; fg: string; border: string }> = {
+  high: { bg: '#e6f4e8', fg: '#1f6e3a', border: '#b6dcc1' },
+  low: { bg: '#fff4d6', fg: '#7a5a16', border: '#e6cc8a' },
+  insufficient: { bg: '#f0f0f0', fg: '#555', border: '#d0d0d0' },
+  neutral: { bg: '#eef2f7', fg: '#3a4a5d', border: '#c7d4e2' },
+  warn: { bg: '#fbeaea', fg: '#a13030', border: '#eebebe' },
+};
+
+const CONFIDENCE_LABEL: Record<'high' | 'low' | 'insufficient', string> = {
+  high: '신뢰도 high',
+  low: '신뢰도 low',
+  insufficient: '표본 부족',
+};
+
 function Chip({ label, tone }: { label: string; tone: ChipTone }) {
-  const palette: Record<ChipTone, { bg: string; fg: string; border: string }> = {
-    high: { bg: '#e6f4e8', fg: '#1f6e3a', border: '#b6dcc1' },
-    low: { bg: '#fff4d6', fg: '#7a5a16', border: '#e6cc8a' },
-    insufficient: { bg: '#f0f0f0', fg: '#555', border: '#d0d0d0' },
-    neutral: { bg: '#eef2f7', fg: '#3a4a5d', border: '#c7d4e2' },
-    warn: { bg: '#fbeaea', fg: '#a13030', border: '#eebebe' },
-  };
-  const c = palette[tone];
+  const c = CHIP_PALETTE[tone];
   return (
     <span
       style={{
@@ -1483,11 +1491,6 @@ function EvidenceCard({
   mode: QueryMode;
 }) {
   const eok = dong.median_man / 10000;
-  const confLabel: Record<'high' | 'low' | 'insufficient', string> = {
-    high: '신뢰도 high',
-    low: '신뢰도 low',
-    insufficient: '표본 부족',
-  };
   const showStddevWarn = dong.build_year_stddev != null && dong.build_year_stddev > 10;
   return (
     <div
@@ -1520,7 +1523,7 @@ function EvidenceCard({
         {eok.toFixed(1)}억
       </div>
       <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        <Chip label={confLabel[dong.confidence]} tone={dong.confidence} />
+        <Chip label={CONFIDENCE_LABEL[dong.confidence]} tone={dong.confidence} />
         {dong.median_build_year != null && (
           <Chip label={`${dong.median_build_year}년식`} tone="neutral" />
         )}
@@ -1533,13 +1536,14 @@ function EvidenceCard({
   );
 }
 
-type RecentTabKey = 'trade' | 'jeonse';
-
-const TAB_ACCENT: Record<RecentTabKey, string> = {
+const TAB_ACCENT: Record<QueryMode, string> = {
   trade: '#2d8a4f',
   jeonse: '#5577c8',
 };
 
+// 부모가 `<RecentTxTabs key={mode} ... />`로 mode 변경 시 자연 remount —
+// 그러면 이 컴포넌트의 activeTab state가 새 defaultTab으로 리셋된다.
+// useEffect로 derived state 동기화하지 않는 이유: React 권장 패턴(key reset).
 function RecentTxTabs({
   trades,
   jeonse,
@@ -1549,15 +1553,9 @@ function RecentTxTabs({
   trades: RecentTransaction[] | undefined;
   jeonse: RecentTransaction[] | undefined;
   loading: boolean;
-  defaultTab: RecentTabKey;
+  defaultTab: QueryMode;
 }) {
-  const [activeTab, setActiveTab] = useState<RecentTabKey>(defaultTab);
-
-  // 헤더 mode가 바뀌면 탭도 따라 변경 (사용자가 명시적으로 다른 탭 누른 직후라도
-  // mode 토글은 의도적인 컨텍스트 전환이므로 동기화)
-  useEffect(() => {
-    setActiveTab(defaultTab);
-  }, [defaultTab]);
+  const [activeTab, setActiveTab] = useState<QueryMode>(defaultTab);
 
   const rows = activeTab === 'trade' ? trades : jeonse;
 
@@ -1641,12 +1639,12 @@ function RecentTabButton({
   count,
   onSelect,
 }: {
-  tab: RecentTabKey;
+  tab: QueryMode;
   label: string;
   active: boolean;
   loading: boolean;
   count: number;
-  onSelect: (tab: RecentTabKey) => void;
+  onSelect: (tab: QueryMode) => void;
 }) {
   const accent = TAB_ACCENT[tab];
   return (
