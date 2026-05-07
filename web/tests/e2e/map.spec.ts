@@ -116,3 +116,70 @@ test('.mapboxgl-canvas 요소가 렌더링된다', async ({ page }) => {
 
   await expect(page.locator('.mapboxgl-canvas')).toHaveCount(1);
 });
+
+// SidePanel은 폴리곤 클릭으로만 열린다. Playwright native mouse는 synthetic
+// MouseEvent보다 안정적으로 mapbox 이벤트 시스템에 도달한다. 좌표는 폴리곤이
+// 등록된 캔버스 내부 비율(강북구 영역 우상단 짙은 녹색 클러스터).
+async function clickPolygon(page: Page) {
+  // 폴리곤 source/layer가 등록돼 hit-test가 성공하도록 보증
+  await expect(page.getByText(/폴리곤\s+\d+개/)).toBeVisible();
+  const canvas = page.locator('canvas.mapboxgl-canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('canvas boundingBox 없음');
+  // 강북구 미아동 ~ (66%, 24%) — viewport 1280×720 기준 폴리곤 클러스터
+  await page.mouse.click(
+    box.x + box.width * 0.66,
+    box.y + box.height * 0.24,
+  );
+}
+
+async function openSidePanelByMapClick(page: Page) {
+  await openMap(page);
+  await clickPolygon(page);
+  await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
+}
+
+test('SidePanel — 매·전 탭 default는 헤더 mode(=매매)와 일치', async ({ page }) => {
+  await openSidePanelByMapClick(page);
+
+  const tablist = page.getByRole('tablist', { name: '최근 거래' });
+  await expect(tablist).toBeVisible();
+
+  const tradeTab = tablist.getByRole('tab', { name: /매매/ });
+  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
+
+  await expect(tradeTab).toHaveAttribute('aria-selected', 'true');
+  await expect(jeonseTab).toHaveAttribute('aria-selected', 'false');
+});
+
+test('SidePanel — 비활성 탭 클릭 시 활성 탭이 바뀐다', async ({ page }) => {
+  await openSidePanelByMapClick(page);
+
+  const tablist = page.getByRole('tablist', { name: '최근 거래' });
+  const tradeTab = tablist.getByRole('tab', { name: /매매/ });
+  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
+
+  await jeonseTab.click();
+
+  await expect(jeonseTab).toHaveAttribute('aria-selected', 'true');
+  await expect(tradeTab).toHaveAttribute('aria-selected', 'false');
+});
+
+test('SidePanel — 헤더 mode 토글 시 default 탭이 따라간다', async ({ page }) => {
+  await openMap(page);
+
+  // 1. 헤더 mode를 전세로 변경
+  await page.getByRole('button', { name: '전세' }).click();
+  await expect
+    .poll(async () => (await page.getByText(/(매매|전세) · .+~.+ · /).textContent()) ?? '')
+    .toContain('전세 ·');
+
+  // 2. 폴리곤 클릭으로 SidePanel 열기
+  await clickPolygon(page);
+  await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
+
+  // 3. default 탭이 전세로 잡혀야 함
+  const tablist = page.getByRole('tablist', { name: '최근 거래' });
+  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
+  await expect(jeonseTab).toHaveAttribute('aria-selected', 'true');
+});
