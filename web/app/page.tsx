@@ -163,6 +163,9 @@ export default function MapPage() {
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
+  // 모바일에서는 zoom control을 좌하단으로 이동 (우상단 ControlPanel pull-down + 우상단 zoom 충돌 회피)
+  const isNarrow = useIsNarrow();
+  const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
@@ -236,7 +239,7 @@ export default function MapPage() {
       }
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    // NavigationControl은 isNarrow 의존 별도 useEffect에서 add — 모바일 좌하단/데스크톱 우상단
 
     map.on('load', async () => {
       try {
@@ -329,6 +332,26 @@ export default function MapPage() {
       mapRef.current = null;
     };
   }, []);
+
+  // 1-B) NavigationControl 위치 — 모바일 좌하단(bottom sheet 시야 비충돌) / 데스크톱 우상단
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const position: 'top-right' | 'bottom-left' = isNarrow ? 'bottom-left' : 'top-right';
+    const apply = () => {
+      if (navControlRef.current) {
+        map.removeControl(navControlRef.current);
+      }
+      const control = new mapboxgl.NavigationControl({ showCompass: false });
+      map.addControl(control, position);
+      navControlRef.current = control;
+    };
+    if (map.loaded()) {
+      apply();
+    } else {
+      map.once('load', apply);
+    }
+  }, [isNarrow]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
