@@ -163,8 +163,6 @@ export default function MapPage() {
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
-  // 모바일에서는 zoom control을 좌하단으로 이동 (우상단 ControlPanel pull-down + 우상단 zoom 충돌 회피)
-  const isNarrow = useIsNarrow();
   const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
@@ -333,11 +331,12 @@ export default function MapPage() {
     };
   }, []);
 
-  // 1-B) NavigationControl 위치 — 모바일 좌하단(bottom sheet 시야 비충돌) / 데스크톱 우상단
+  // 1-B) NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단
+  // hover-capable 여부로 분기. 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const position: 'top-right' | 'bottom-left' = isNarrow ? 'bottom-left' : 'top-right';
+    const position: 'top-right' | 'bottom-left' = isHoverCapable ? 'top-right' : 'bottom-left';
     const apply = () => {
       if (navControlRef.current) {
         map.removeControl(navControlRef.current);
@@ -351,7 +350,7 @@ export default function MapPage() {
     } else {
       map.once('load', apply);
     }
-  }, [isNarrow]);
+  }, [isHoverCapable]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
