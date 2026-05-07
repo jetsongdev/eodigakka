@@ -13,6 +13,7 @@
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
 ### 변경
+- 시트 열린 상태에서 mode/size 변경 시 selected 강조 풀리는 회귀 fix — `removeFeatureState` 직후 `prevSelectedBjdRef`로 selected 즉시 복원
 - iPad Mini portrait + PC fitBounds padding 보정
 - 선택된 폴리곤 외곽선 강조(line-width: 3, #0066ff) 및 fill-opacity 상향(0.85)으로 selected affordance 추가
 - 폴리곤 클릭 시 시트가 안 가린 빈 공간으로 `fitBounds` zoom-in (모바일은 상단 22% / 데스크톱은 좌측 ~67%), 시트 닫을 때 원래 카메라로 `flyTo` 복귀. `polygonsGeoJsonRef`로 GeoJSON 캐시 + `originalCameraRef`로 첫 선택 시점 카메라 저장(연속 선택은 보존). `computePolygonBbox` Polygon/MultiPolygon 지원 inline 헬퍼

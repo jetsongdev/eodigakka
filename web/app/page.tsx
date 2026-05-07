@@ -546,6 +546,15 @@ export default function MapPage() {
           { color: dong.color, matched: true },
         );
       }
+      // removeFeatureState가 selected도 함께 지움 → 복원. selectedBjd 자체는 유지되므로
+      // 이 ref 값으로 즉시 다시 박는다 (1-C useEffect는 selectedBjd 변경에만 반응).
+      const sel = prevSelectedBjdRef.current;
+      if (sel) {
+        map.setFeatureState(
+          { source: POLYGONS_SOURCE_ID, id: sel },
+          { selected: true },
+        );
+      }
     };
     tryApply();
   }, [allDongs, query.cashMin, query.cashMax, query.mode, dataFreshness]);
