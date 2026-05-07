@@ -152,17 +152,21 @@ test('SidePanel — 매·전 탭 default는 헤더 mode(=매매)와 일치', asy
   await expect(jeonseTab).toHaveAttribute('aria-selected', 'false');
 });
 
-test('SidePanel — 비활성 탭 클릭 시 활성 탭이 바뀐다', async ({ page }) => {
+test('SidePanel — 비활성 탭 클릭 시 활성 탭과 헤더 mode가 함께 바뀐다', async ({ page }) => {
   await openSidePanelByMapClick(page);
 
   const tablist = page.getByRole('tablist', { name: '최근 거래' });
   const tradeTab = tablist.getByRole('tab', { name: /매매/ });
   const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
 
   await jeonseTab.click();
 
   await expect(jeonseTab).toHaveAttribute('aria-selected', 'true');
   await expect(tradeTab).toHaveAttribute('aria-selected', 'false');
+  await expect
+    .poll(async () => (await evidence.textContent()) ?? '')
+    .toContain('전세 ·');
 });
 
 test('SidePanel — 헤더 mode 토글 시 default 탭이 따라간다', async ({ page }) => {

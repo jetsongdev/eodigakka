@@ -481,6 +481,9 @@ export default function MapPage() {
             loading={dongDetailsLoading}
             mode={query.mode}
             size={query.size}
+            onModeChange={(mode) => setQuery((current) => (
+              current.mode === mode ? current : { ...current, mode }
+            ))}
             onClose={() => setSelectedBjd(null)}
           />
         )}
@@ -1169,6 +1172,7 @@ function SidePanel({
   loading,
   mode,
   size,
+  onModeChange,
   onClose,
 }: {
   bjdCode: string;
@@ -1177,6 +1181,7 @@ function SidePanel({
   loading: boolean;
   mode: QueryMode;
   size: SizeOption;
+  onModeChange: (mode: QueryMode) => void;
   onClose: () => void;
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
@@ -1303,11 +1308,11 @@ function SidePanel({
       )}
 
       <RecentTxTabs
-        key={mode}
         trades={details?.recent_trades}
         jeonse={details?.recent_jeonse}
         loading={loading}
-        defaultTab={mode}
+        mode={mode}
+        onModeChange={onModeChange}
       />
 
       {details && (
@@ -1541,23 +1546,20 @@ const TAB_ACCENT: Record<QueryMode, string> = {
   jeonse: '#5577c8',
 };
 
-// 부모가 `<RecentTxTabs key={mode} ... />`로 mode 변경 시 자연 remount —
-// 그러면 이 컴포넌트의 activeTab state가 새 defaultTab으로 리셋된다.
-// useEffect로 derived state 동기화하지 않는 이유: React 권장 패턴(key reset).
 function RecentTxTabs({
   trades,
   jeonse,
   loading,
-  defaultTab,
+  mode,
+  onModeChange,
 }: {
   trades: RecentTransaction[] | undefined;
   jeonse: RecentTransaction[] | undefined;
   loading: boolean;
-  defaultTab: QueryMode;
+  mode: QueryMode;
+  onModeChange: (mode: QueryMode) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<QueryMode>(defaultTab);
-
-  const rows = activeTab === 'trade' ? trades : jeonse;
+  const rows = mode === 'trade' ? trades : jeonse;
 
   return (
     <div style={{ marginTop: 14 }}>
@@ -1574,23 +1576,23 @@ function RecentTxTabs({
         <RecentTabButton
           tab="trade"
           label="매매"
-          active={activeTab === 'trade'}
+          active={mode === 'trade'}
           loading={loading}
           count={trades?.length ?? 0}
-          onSelect={setActiveTab}
+          onSelect={onModeChange}
         />
         <RecentTabButton
           tab="jeonse"
           label="전세"
-          active={activeTab === 'jeonse'}
+          active={mode === 'jeonse'}
           loading={loading}
           count={jeonse?.length ?? 0}
-          onSelect={setActiveTab}
+          onSelect={onModeChange}
         />
       </div>
       <div
         role="tabpanel"
-        aria-label={`최근 ${activeTab === 'trade' ? '매매' : '전세'}`}
+        aria-label={`최근 ${mode === 'trade' ? '매매' : '전세'}`}
         style={{
           background: 'rgba(255,255,255,0.55)',
           padding: '8px 10px',

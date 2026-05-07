@@ -25,6 +25,7 @@
 - `web/app/page.tsx` `DongDetailsResponse` interface — `recent_transactions` 제거, `recent_trades` + `recent_jeonse` 추가. `RecentTransaction`에서 `mode`·`monthly_man` 필드 제거
 - SidePanel evidence 박스 — 인라인 텍스트("중위 N억 · confidence · N년식 · ⚠️신구축 혼재")에서 시각 위계 카드로 교체
 - SidePanel `asideStyle` background — 0.97/0.98 단색 → 0.86/0.88 + `backdropFilter: blur(6px)`. 탭 콘텐츠 영역은 `rgba(255,255,255,0.55)` 한층 더 투명한 시트
+- SidePanel 최근 거래 탭 — 내부 state/remount reset 제거, 헤더 `mode`를 단일 source of truth로 사용
 
 ## [v0.6.0] - 2026-05-06 - 모바일 SidePanel bottom sheet
 
