@@ -440,10 +440,19 @@ export default function MapPage() {
       if (!bbox) return;
 
       const container = map.getContainer();
+      const w = container.clientWidth;
       const h = container.clientHeight;
-      const padding = isNarrow
-        ? { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 }
-        : { top: 80, right: 440, bottom: 80, left: 80 };
+      let padding: { top: number; right: number; bottom: number; left: number };
+      if (isNarrow) {
+        // 모바일 — 시트 max 80vh 하단 점유
+        padding = { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 };
+      } else if (w <= 1024) {
+        // 좁은 데스크톱(iPad Mini portrait/landscape, iPad Pro 11 portrait)
+        padding = { top: 360, right: 440, bottom: 80, left: 80 };
+      } else {
+        // 표준 데스크톱
+        padding = { top: 80, right: 480, bottom: 80, left: 80 };
+      }
 
       map.fitBounds(bbox, { padding, duration: 700, maxZoom: 14 });
     } else if (originalCameraRef.current) {
