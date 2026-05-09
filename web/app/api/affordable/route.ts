@@ -119,6 +119,12 @@ export async function GET(request: NextRequest) {
           ? `RTMS ${maxContractDate} 신고분까지`
           : 'RTMS 신고분 없음',
         evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
+        _timing: {
+          stats_ms: Number(tStats.toFixed(1)),
+          fresh_ms: Number(tFresh.toFixed(1)),
+          db_ms: Number(tDb.toFixed(1)),
+          eval_ms: Number(tEval.toFixed(1)),
+        },
       },
       {
         headers: {
