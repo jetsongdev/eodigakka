@@ -75,3 +75,31 @@ test('GET /api/affordable rejects invalid size', async ({ request }) => {
 
   expect(response.status()).toBe(400);
 });
+
+test('GET /api/dong/:bjd/complexes returns separate trade and jeonse arrays', async ({
+  request,
+}) => {
+  // 거래 표본 충분한 동(강북구 미아동)으로 검증. bjd_polygon에 매칭 안 되면 skip.
+  const probe = await request.get(
+    '/api/affordable?mode=trade&cash_min=0&cash_max=500000&size=all',
+  );
+  if (probe.status() !== 200) test.skip(true, 'affordable probe 실패');
+  const probeBody = await probe.json();
+  const candidate = probeBody.dongs?.find((d: { tx_count_3m: number }) => d.tx_count_3m >= 5);
+  test.skip(!candidate, '거래 5건 이상 동 없음');
+
+  const response = await request.get(`/api/dong/${candidate.bjd_code}/complexes`);
+  expect(response.status()).toBe(200);
+
+  const body = await response.json();
+  expect(body).toHaveProperty('recent_trades');
+  expect(body).toHaveProperty('recent_jeonse');
+  expect(Array.isArray(body.recent_trades)).toBe(true);
+  expect(Array.isArray(body.recent_jeonse)).toBe(true);
+  expect(body).not.toHaveProperty('recent_transactions');
+  // mode 컬럼 제거 검증
+  if (body.recent_trades.length > 0) {
+    expect(body.recent_trades[0]).not.toHaveProperty('mode');
+    expect(body.recent_trades[0]).toHaveProperty('amount_man');
+  }
+});

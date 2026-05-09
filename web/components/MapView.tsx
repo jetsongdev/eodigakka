@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 
 import type { DongColor } from '../lib/filter';
@@ -42,8 +42,40 @@ export interface HoverInfo {
   y: number;
 }
 
+// 폴리곤 geometry에서 [[minLng, minLat], [maxLng, maxLat]] 계산. Polygon/MultiPolygon 지원.
+// querySourceFeatures는 viewport 안만 반환해서 전 영역 커버 못함 — 캐시한 GeoJSON에서 직접 계산.
+function computePolygonBbox(
+  geom: GeoJSON.Geometry,
+): [[number, number], [number, number]] | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (coord: number[]) => {
+    if (coord[0] < minX) minX = coord[0];
+    if (coord[0] > maxX) maxX = coord[0];
+    if (coord[1] < minY) minY = coord[1];
+    if (coord[1] > maxY) maxY = coord[1];
+  };
+  if (geom.type === 'Polygon') {
+    for (const ring of geom.coordinates) for (const c of ring) visit(c);
+  } else if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates) for (const ring of poly) for (const c of ring) visit(c);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(minX)) return null;
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ];
+}
+
 type MapViewProps = {
   matched: AffordableDongResponse[];
+  selectedBjd: string | null;
+  isHoverCapable: boolean;
+  isNarrow: boolean;
   onHover: (info: HoverInfo | null) => void;
   onSelectBjd: (code: string) => void;
   onPolygonCount: (n: number) => void;
@@ -52,6 +84,9 @@ type MapViewProps = {
 
 export default function MapView({
   matched,
+  selectedBjd,
+  isHoverCapable,
+  isNarrow,
   onHover,
   onSelectBjd,
   onPolygonCount,
@@ -59,6 +94,12 @@ export default function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
+  const polygonsGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  const originalCameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  const prevSelectedBjdRef = useRef<string | null>(null);
+  const prevMatchedSetRef = useRef<Set<string>>(new Set());
 
   // 1) 지도 + 폴리곤 source/layer 1회 초기화
   useEffect(() => {
@@ -119,13 +160,12 @@ export default function MapView({
       }
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
-
     map.on('load', async () => {
       try {
         const res = await fetch('/api/polygons');
         if (!res.ok) throw new Error(`/api/polygons HTTP ${res.status}`);
-        const fc = await res.json();
+        const fc = (await res.json()) as GeoJSON.FeatureCollection;
+        polygonsGeoJsonRef.current = fc;
 
         map.addSource(POLYGONS_SOURCE_ID, {
           type: 'geojson',
@@ -151,6 +191,7 @@ export default function MapView({
             ],
             'fill-opacity': [
               'case',
+              ['==', ['feature-state', 'selected'], true], 0.85,
               ['==', ['feature-state', 'color'], 'deep_green_low'], 0.5,
               ['==', ['feature-state', 'matched'], true], 0.7,
               0.18,
@@ -163,8 +204,16 @@ export default function MapView({
           type: 'line',
           source: POLYGONS_SOURCE_ID,
           paint: {
-            'line-color': '#666',
-            'line-width': 0.4,
+            'line-color': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], '#0066ff',
+              '#666',
+            ],
+            'line-width': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], 3,
+              0.4,
+            ],
           },
         });
 
@@ -197,6 +246,7 @@ export default function MapView({
         });
 
         onPolygonCount(fc.features?.length ?? 0);
+        setMapLoaded(true);
       } catch (err) {
         onError(err instanceof Error ? err.message : String(err));
       }
@@ -210,20 +260,106 @@ export default function MapView({
         // mapbox 내부 cleanup이 실패해도 useEffect cleanup은 throw하지 않는다
       }
       mapRef.current = null;
+      setMapLoaded(false);
     };
   }, [onError, onHover, onPolygonCount, onSelectBjd]);
+
+  // NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단.
+  // 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const position: 'top-right' | 'bottom-left' = isHoverCapable ? 'top-right' : 'bottom-left';
+    if (navControlRef.current) {
+      map.removeControl(navControlRef.current);
+    }
+    const control = new mapboxgl.NavigationControl({ showCompass: false });
+    map.addControl(control, position);
+    navControlRef.current = control;
+  }, [isHoverCapable, mapLoaded]);
+
+  // 선택된 동 polygon affordance — bjd_code promoteId 기반 feature-state 토글
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    if (!map.getSource(POLYGONS_SOURCE_ID)) return;
+
+    if (prevSelectedBjdRef.current) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: prevSelectedBjdRef.current },
+        { selected: false },
+      );
+    }
+    if (selectedBjd) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: selectedBjd },
+        { selected: true },
+      );
+    }
+    prevSelectedBjdRef.current = selectedBjd;
+  }, [selectedBjd, mapLoaded]);
+
+  // 선택 시 폴리곤으로 fitBounds, 닫을 때 원래 카메라로 복귀
+  // padding으로 시트 영역 회피 — 모바일은 하단(시트 max 80vh), 데스크톱은 우측(side panel ~420px)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (selectedBjd) {
+      // 첫 선택일 때만 카메라 저장 (연속 선택 시 원래 위치 유지)
+      if (!originalCameraRef.current) {
+        const c = map.getCenter();
+        originalCameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
+      }
+      const fc = polygonsGeoJsonRef.current;
+      const feature = fc?.features.find((f) => f.properties?.bjd_code === selectedBjd);
+      const bbox = feature ? computePolygonBbox(feature.geometry) : null;
+      if (!bbox) return;
+
+      const container = map.getContainer();
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      let padding: { top: number; right: number; bottom: number; left: number };
+      if (isNarrow) {
+        // 모바일 — 시트 max 80vh 하단 점유
+        padding = { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 };
+      } else if (w <= 1024) {
+        // 좁은 데스크톱(iPad Mini portrait/landscape, iPad Pro 11 portrait)
+        padding = { top: 360, right: 440, bottom: 80, left: 80 };
+      } else {
+        // 표준 데스크톱
+        padding = { top: 80, right: 480, bottom: 80, left: 80 };
+      }
+
+      map.fitBounds(bbox, { padding, duration: 700, maxZoom: 14 });
+    } else if (originalCameraRef.current) {
+      const { center, zoom } = originalCameraRef.current;
+      map.flyTo({ center, zoom, duration: 700 });
+      originalCameraRef.current = null;
+    }
+  }, [selectedBjd, mapLoaded, isNarrow]);
 
   // matched 변경 시 map feature-state 갱신
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapLoaded) return;
+
+    const newSet = new Set(matched.map((d) => d.bjd_code));
+    const prev = prevMatchedSetRef.current;
 
     const tryApply = () => {
       if (!map.getSource(POLYGONS_SOURCE_ID)) {
         map.once('idle', tryApply);
         return;
       }
-      map.removeFeatureState({ source: POLYGONS_SOURCE_ID });
+      // 차분 적용 — prev에 있고 new에 없는 동의 color/matched만 해제. selected는
+      // 자연 보존(전체 wipe 회귀 대신). 슬라이더 drag 시 467개 wipe + N개 재투입을
+      // |added|+|removed|개 호출로 축소.
+      for (const code of prev) {
+        if (newSet.has(code)) continue;
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'color');
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'matched');
+      }
       for (const dong of matched) {
         map.setFeatureState(
           { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
@@ -232,7 +368,8 @@ export default function MapView({
       }
     };
     tryApply();
-  }, [matched]);
+    prevMatchedSetRef.current = newSet;
+  }, [matched, mapLoaded]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }

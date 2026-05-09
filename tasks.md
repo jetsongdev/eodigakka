@@ -22,6 +22,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
 - [x] **SidePanel 모바일 bottom sheet** (2026-05-05) — `useIsNarrow` 훅 + isNarrow 분기로 `position: fixed; bottom: 0; max-height: 80vh`, 백드롭 탭으로 닫기, 드래그 핸들 시각 affordance 추가. 스와이프 제스처는 의존성 회피로 제외
 - [ ] 잔여: 모바일 범례 floating chip, 슬라이더 햅틱 피드백
+- [x] **확대/축소 버튼 크기 키우기** (2026-05-08) — Mapbox `NavigationControl`의 기본 30×30 → 44×44(권장 터치 타겟)로 키움. `web/app/globals.css`에 `.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in/out` width/height + 아이콘 background-size 26×26 override. 모든 viewport 공통 — 데스크톱도 hit area 확대로 사용성 ↑.
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
@@ -119,6 +120,39 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [ ] 검증: 폼 제출 → 본인 Telegram 토픽 도착 → 내용·timestamp 확인. 스팸 1건 던져서 captcha·honeypot 동작 확인
 - [ ] CLAUDE.md 「외부 위임 규약」 또는 신규 섹션에 피드백 fan-out 경로 한 줄 추가 (Telegram 토픽 일람 동기화)
 
+### H. `/api/affordable` 첫 로딩 latency 개선 (2026-05-07 신규)
+
+**현상**: 첫 페이지 진입 시 LoadingOverlay "지도 준비 중" 단계에서 `/api/affordable` 호출이 약 **2.25초** 소요. mode/size 변경 시에도 같은 수준 latency 발생 (cash 변경은 클라 사이드 필터라 영향 없음). 로컬 dev/Production 양쪽 측정 필요.
+
+**가설별 진단·개선 후보**:
+
+- [ ] **A. Neon free tier 콜드 스타트** — 5분 idle 후 compute suspend, 첫 쿼리에 1~3초. 가장 유력한 dominant cost.
+  - 진단: 두 번째 호출 latency 측정 (warm 상태). 1초 미만이면 콜드 스타트가 주범.
+  - 개선: (1) Vercel Cron으로 5분마다 `/api/health` ping해서 always-warm 유지 (free tier 한계 안에서) (2) Neon paid tier upgrade (월 $19, idle suspend 비활성)
+- [ ] **B. 두 query 직렬화** — `mv_dong_stats` JOIN 쿼리 + `MAX(contract_date)` freshness 쿼리가 sequential. `Promise.all`로 병렬화하면 RTT 1번 감소.
+  - 위치: `web/app/api/affordable/route.ts:36-60` + `:101-104`
+  - 빠른 win, 영향 측정 후에 유의미하면 적용
+- [ ] **C. freshness 쿼리 캐시** — `MAX(contract_date) FROM tx_apt_trade/rent`는 ETL이 KST 03:00에만 갱신. 매 요청마다 raw 테이블 풀스캔 불필요.
+  - 옵션 1: `etl_job_status.mv_refreshed_at` 또는 신규 컬럼 `last_contract_date`에 ETL이 기록 → API는 그 값만 SELECT (1행)
+  - 옵션 2: Next.js `unstable_cache`로 60초 TTL 캐시
+- [ ] **D. affordable 응답 자체 캐시** — cash 필터를 클라로 옮긴 뒤로 mode×size 조합은 `(trade|jeonse) × (S|M|L|all)` = 8가지로 고정. 각 조합 응답을 60s~1h TTL로 edge cache 가능.
+  - Vercel Runtime Cache API 또는 `unstable_cache`(`'use cache'` directive, Next.js 16) 검토
+  - 트레이드오프: ETL이 03:00 갱신이라 1시간 TTL도 신선도 충분, mode/size 토글이 즉시 응답 → UX 큰 향상
+- [ ] **E. raw 테이블 인덱스 점검** — `tx_apt_trade(contract_date)` / `tx_apt_rent(contract_date)`에 인덱스 없으면 MAX가 풀스캔.
+  - 진단: `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade;` Seq Scan이면 인덱스 추가
+  - C로 우회 가능하면 인덱스는 불필요
+- [ ] **F. LoadingOverlay 단계별 메시지 정밀화** — 현재 "동별 거래 데이터 분석 중..." 한 줄이 2초 머묾. 콜드 스타트인지 쿼리 자체가 느린지 사용자가 모름.
+  - p50/p95 측정값을 로그로 수집(Vercel Functions 로그)해서 메트릭 기반으로 메시지 다듬기
+- [ ] **G. 메트릭 수집** — `/api/affordable`에 server timing 헤더 추가, p50/p95를 Vercel Analytics 또는 Healthchecks pingback에 일주일 누적 후 의사결정
+
+**우선순위 추천 (작은 win → 큰 win)**:
+1. B (Promise.all 병렬화) — 5분 작업, latency 측정 후 적용
+2. A 진단 (warm 호출 latency 비교) — Neon 콜드 스타트가 dominant이면 D(캐시)가 진짜 답
+3. D (응답 edge cache) — 가장 큰 UX 개선, 트레이드오프 명확
+4. C, E, F, G — D로 해결되면 후순위
+
+**트리거**: 사용자가 "첫 로딩 느리다" 1회 인지(2026-05-07). 임장 1회 검증 직후 또는 외부 공유 직전에 D까지 처리.
+
 ---
 
 ## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)
@@ -188,14 +222,13 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [~] **사이드패널 UI 개선** — 분포 차트만 1차 처리 완료, 나머지 항목은 후속 (2026-05-05)
   - [x] **분포 차트**: SVG 박스플롯 — `mv_dong_stats`의 p25/p50/p75 + 매매·전세 동시 (현재 모드 100%, 비교 모드 55% 투명)
   - [x] **매매·전세 동시 비교**: 분포 차트 안에 흡수 — 별도 mini-card는 만들지 않음
-  - [ ] **시각 위계**: 중위 가격을 가장 큰 숫자로 노출, confidence·연식 칩 형태로 분리
+  - [x] **시각 위계** (2026-05-07) — `EvidenceCard` 컴포넌트로 분리. 중위 가격 26pt 큰 숫자 + 라벨("동 중위 (매매/전세)") + confidence·연식·신구축혼재를 `Chip` (high=녹색/low=노랑/insufficient=회색/neutral=파랑/warn=빨강) 칩으로 분리. evidence는 작은 회색으로 하단 배치.
   - [ ] **평형 분포**: area_m2 히스토그램
   - [ ] **단지 카드 강화**: TOP5에 미니 sparkline + 평형/연식 라벨
   - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
-  - [ ] **최근 거래 매·전 분리 표시**: 현재 한 표에 `recent_transactions` 10건 섞여서 노출 (`mode === 'TRADE' ? '매' : '전'` 라벨 컬럼). 매매 최근 10건 / 전세 최근 10건 각각 두 섹션으로 분리
-    - `/api/dong/[bjd]/complexes` 응답 스키마 변경: `recent_transactions: TxRow[]` → `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` (기존 단일 배열 polyfill 유지 검토)
-    - SidePanel 렌더: 두 섹션 헤더 (`매매 최근 10건` / `전세 최근 10건`), 모드 라벨 컬럼 제거 가능
-    - 마이그레이션: API 응답 호환성 — 한 번에 둘 다 보내고 클라에서 split도 가능 (DB 한 번 쿼리, ORDER BY mode, contract_date DESC LIMIT)
+  - [x] **최근 거래 매·전 분리 표시** (2026-05-07) — API 응답: `recent_transactions[]` 단일 배열 폐기, `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` 두 배열로 분리. `route.ts`에서 두 별도 LIMIT 10 query (Promise.all 병렬). e2e 검증 추가(`api.spec.ts`).
+  - [x] **탭 UI 전환** (2026-05-07) — 두 섹션 stack을 `RecentTxTabs` 컴포넌트(role=tablist + tab × 2)로 교체. 활성 탭 underline은 매매=녹색/전세=파랑. **default 탭 = 헤더 mode와 동기화** (`useEffect([defaultTab])`로 mode 토글 시 따라감). 탭 콘텐츠 영역은 `rgba(255,255,255,0.55)` 살짝 투명한 시트.
+  - [x] **사이드패널 시트 투명도** (2026-05-07) — 데스크톱 0.97 → 0.86, 모바일 0.98 → 0.88로 낮추고 `backdropFilter: blur(6px)` 추가. 뒤 지도가 살짝 비치면서 가독성은 blur로 보존.
   - [ ] **최근 거래 더보기**: 10건 이후 페이지네이션. 시트 안에서 "더보기" 버튼 → 다음 10건 append. cursor는 `(contract_date, id)` 또는 `OFFSET` 기반
     - API: `/api/dong/[bjd]/complexes?txCursor=<base64>&txMode=trade|jeonse` 또는 `?txOffset=10`
     - 모바일 시트 안에서 자연스러운 무한 스크롤도 옵션 — 다만 시트 내부 스크롤 + 더보기 명시 클릭이 더 명확

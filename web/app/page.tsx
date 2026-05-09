@@ -27,11 +27,9 @@ interface TopComplex {
 }
 
 interface RecentTransaction {
-  mode: 'TRADE' | 'JEONSE';
   complex_name: string;
   area_m2: number;
   amount_man: number;
-  monthly_man: number;
   floor: number | null;
   contract_date: string;
   evidence: string;
@@ -52,7 +50,8 @@ interface DongDetailsResponse {
   bjd_name: string;
   trade_top5: TopComplex[];
   jeonse_top5: TopComplex[];
-  recent_transactions: RecentTransaction[];
+  recent_trades: RecentTransaction[];
+  recent_jeonse: RecentTransaction[];
   distributions: DongDistribution[];
   generated_at: string;
   evidence: string;
@@ -132,6 +131,8 @@ export default function MapPage() {
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
+  // SidePanel이 bottom sheet인지 side panel인지 — fitBounds padding 분기에 사용
+  const isNarrow = useIsNarrow();
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
@@ -249,6 +250,9 @@ export default function MapPage() {
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <MapView
           matched={matched}
+          selectedBjd={selectedBjd}
+          isHoverCapable={isHoverCapable}
+          isNarrow={isNarrow}
           onHover={setHover}
           onSelectBjd={setSelectedBjd}
           onPolygonCount={setPolygonCount}
@@ -286,6 +290,9 @@ export default function MapPage() {
             loading={dongDetailsLoading}
             mode={query.mode}
             size={query.size}
+            onModeChange={(mode) => setQuery((current) => (
+              current.mode === mode ? current : { ...current, mode }
+            ))}
             onClose={() => setSelectedBjd(null)}
           />
         )}
@@ -974,6 +981,7 @@ function SidePanel({
   loading,
   mode,
   size,
+  onModeChange,
   onClose,
 }: {
   bjdCode: string;
@@ -982,6 +990,7 @@ function SidePanel({
   loading: boolean;
   mode: QueryMode;
   size: SizeOption;
+  onModeChange: (mode: QueryMode) => void;
   onClose: () => void;
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
@@ -995,7 +1004,9 @@ function SidePanel({
         right: 0,
         maxHeight: '80vh',
         padding: '8px 16px 16px',
-        background: 'rgba(255,255,255,0.98)',
+        background: 'rgba(255,255,255,0.88)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: '16px 16px 0 0',
         boxShadow: '0 -4px 20px rgba(0,0,0,0.18)',
         zIndex: 3,
@@ -1009,7 +1020,9 @@ function SidePanel({
         bottom: 12,
         width: 360,
         padding: '14px 16px',
-        background: 'rgba(255,255,255,0.97)',
+        background: 'rgba(255,255,255,0.86)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: 8,
         boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
         zIndex: 2,
@@ -1077,24 +1090,7 @@ function SidePanel({
           </button>
         </div>
 
-      {dong && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: '6px 8px',
-            background: '#f4f6f4',
-            borderLeft: '3px solid #2d8a4f',
-            fontSize: 12,
-          }}
-        >
-          {dong.evidence}
-          <div style={{ marginTop: 2, color: '#555' }}>
-            중위 {(dong.median_man / 10000).toFixed(1)}억 · {dong.confidence}
-            {dong.median_build_year && ` · 중위 ${dong.median_build_year}년식`}
-            {dong.build_year_stddev != null && dong.build_year_stddev > 10 && ' ⚠️ 신구축 혼재'}
-          </div>
-        </div>
-      )}
+      {dong && <EvidenceCard dong={dong} mode={mode} />}
 
       {details && details.distributions.length > 0 && (
         <DistributionChart distributions={details.distributions} mode={mode} size={size} />
@@ -1120,40 +1116,13 @@ function SidePanel({
         </ol>
       )}
 
-      <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>최근 거래 10건</h4>
-      {loading && <div style={{ color: '#888' }}>로드 중...</div>}
-      {!loading && details && details.recent_transactions.length === 0 && (
-        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-      )}
-      {!loading && details && details.recent_transactions.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>모드</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {details.recent_transactions.map((tx, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
-                <td style={{ padding: '4px 2px', color: tx.mode === 'TRADE' ? '#2d8a4f' : '#777' }}>
-                  {tx.mode === 'TRADE' ? '매' : '전'}
-                </td>
-                <td style={{ padding: '4px 2px' }}>
-                  {tx.complex_name}
-                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                </td>
-                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                  {(tx.amount_man / 10000).toFixed(1)}억
-                </td>
-                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <RecentTxTabs
+        trades={details?.recent_trades}
+        jeonse={details?.recent_jeonse}
+        loading={loading}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
 
       {details && (
         <div style={{ marginTop: 12, fontSize: 11, color: '#888' }}>
@@ -1287,6 +1256,238 @@ function DistributionChart({
         })}
       </svg>
     </div>
+  );
+}
+
+type ChipTone = 'high' | 'low' | 'insufficient' | 'neutral' | 'warn';
+
+const CHIP_PALETTE: Record<ChipTone, { bg: string; fg: string; border: string }> = {
+  high: { bg: '#e6f4e8', fg: '#1f6e3a', border: '#b6dcc1' },
+  low: { bg: '#fff4d6', fg: '#7a5a16', border: '#e6cc8a' },
+  insufficient: { bg: '#f0f0f0', fg: '#555', border: '#d0d0d0' },
+  neutral: { bg: '#eef2f7', fg: '#3a4a5d', border: '#c7d4e2' },
+  warn: { bg: '#fbeaea', fg: '#a13030', border: '#eebebe' },
+};
+
+const CONFIDENCE_LABEL: Record<'high' | 'low' | 'insufficient', string> = {
+  high: '신뢰도 high',
+  low: '신뢰도 low',
+  insufficient: '표본 부족',
+};
+
+function Chip({ label, tone }: { label: string; tone: ChipTone }) {
+  const c = CHIP_PALETTE[tone];
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        background: c.bg,
+        color: c.fg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 600,
+        lineHeight: 1.45,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EvidenceCard({
+  dong,
+  mode,
+}: {
+  dong: AffordableDongResponse;
+  mode: QueryMode;
+}) {
+  const eok = dong.median_man / 10000;
+  const showStddevWarn = dong.build_year_stddev != null && dong.build_year_stddev > 10;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '10px 12px',
+        background: '#f4f6f4',
+        borderLeft: '3px solid #2d8a4f',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: '#555',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
+        동 중위 ({mode === 'trade' ? '매매' : '전세'})
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 700,
+          color: '#1a1a1a',
+          lineHeight: 1.1,
+          marginTop: 2,
+        }}
+      >
+        {eok.toFixed(1)}억
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <Chip label={CONFIDENCE_LABEL[dong.confidence]} tone={dong.confidence} />
+        {dong.median_build_year != null && (
+          <Chip label={`${dong.median_build_year}년식`} tone="neutral" />
+        )}
+        {showStddevWarn && <Chip label="⚠ 신구축 혼재" tone="warn" />}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: '#666', lineHeight: 1.5 }}>
+        {dong.evidence}
+      </div>
+    </div>
+  );
+}
+
+const TAB_ACCENT: Record<QueryMode, string> = {
+  trade: '#2d8a4f',
+  jeonse: '#5577c8',
+};
+
+function RecentTxTabs({
+  trades,
+  jeonse,
+  loading,
+  mode,
+  onModeChange,
+}: {
+  trades: RecentTransaction[] | undefined;
+  jeonse: RecentTransaction[] | undefined;
+  loading: boolean;
+  mode: QueryMode;
+  onModeChange: (mode: QueryMode) => void;
+}) {
+  const rows = mode === 'trade' ? trades : jeonse;
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        role="tablist"
+        aria-label="최근 거래"
+        style={{
+          display: 'flex',
+          gap: 0,
+          borderBottom: '1px solid #d8d8d8',
+          marginBottom: 8,
+        }}
+      >
+        <RecentTabButton
+          tab="trade"
+          label="매매"
+          active={mode === 'trade'}
+          loading={loading}
+          count={trades?.length ?? 0}
+          onSelect={onModeChange}
+        />
+        <RecentTabButton
+          tab="jeonse"
+          label="전세"
+          active={mode === 'jeonse'}
+          loading={loading}
+          count={jeonse?.length ?? 0}
+          onSelect={onModeChange}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        aria-label={`최근 ${mode === 'trade' ? '매매' : '전세'}`}
+        style={{
+          background: 'rgba(255,255,255,0.55)',
+          padding: '8px 10px',
+          borderRadius: 6,
+        }}
+      >
+        {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
+        {!loading && (!rows || rows.length === 0) && (
+          <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+        )}
+        {!loading && rows && rows.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((tx, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <td style={{ padding: '4px 2px' }}>
+                    {tx.complex_name}
+                    <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                  </td>
+                  <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                    {(tx.amount_man / 10000).toFixed(1)}억
+                  </td>
+                  <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentTabButton({
+  tab,
+  label,
+  active,
+  loading,
+  count,
+  onSelect,
+}: {
+  tab: QueryMode;
+  label: string;
+  active: boolean;
+  loading: boolean;
+  count: number;
+  onSelect: (tab: QueryMode) => void;
+}) {
+  const accent = TAB_ACCENT[tab];
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => onSelect(tab)}
+      style={{
+        flex: 1,
+        padding: '8px 10px',
+        border: 'none',
+        borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
+        background: 'transparent',
+        color: active ? accent : '#666',
+        fontWeight: active ? 700 : 500,
+        fontSize: 13,
+        cursor: 'pointer',
+        marginBottom: -1,
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'center',
+        gap: 5,
+      }}
+    >
+      <span>{label}</span>
+      {!loading && (
+        <span style={{ fontWeight: 400, fontSize: 11, color: active ? '#666' : '#999' }}>
+          {count}건
+        </span>
+      )}
+    </button>
   );
 }
 
