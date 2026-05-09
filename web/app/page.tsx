@@ -51,11 +51,9 @@ interface TopComplex {
 }
 
 interface RecentTransaction {
-  mode: 'TRADE' | 'JEONSE';
   complex_name: string;
   area_m2: number;
   amount_man: number;
-  monthly_man: number;
   floor: number | null;
   contract_date: string;
   evidence: string;
@@ -76,7 +74,8 @@ interface DongDetailsResponse {
   bjd_name: string;
   trade_top5: TopComplex[];
   jeonse_top5: TopComplex[];
-  recent_transactions: RecentTransaction[];
+  recent_trades: RecentTransaction[];
+  recent_jeonse: RecentTransaction[];
   distributions: DongDistribution[];
   generated_at: string;
   evidence: string;
@@ -121,6 +120,35 @@ function formatMan(man: number): string {
   return `${eok.toFixed(1)}억`;
 }
 
+// 폴리곤 geometry에서 [[minLng, minLat], [maxLng, maxLat]] 계산. Polygon/MultiPolygon 지원.
+// querySourceFeatures는 viewport 안만 반환해서 전 영역 커버 못함 — 캐시한 GeoJSON에서 직접 계산.
+function computePolygonBbox(
+  geom: GeoJSON.Geometry,
+): [[number, number], [number, number]] | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (coord: number[]) => {
+    if (coord[0] < minX) minX = coord[0];
+    if (coord[0] > maxX) maxX = coord[0];
+    if (coord[1] < minY) minY = coord[1];
+    if (coord[1] > maxY) maxY = coord[1];
+  };
+  if (geom.type === 'Polygon') {
+    for (const ring of geom.coordinates) for (const c of ring) visit(c);
+  } else if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates) for (const ring of poly) for (const c of ring) visit(c);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(minX)) return null;
+  return [
+    [minX, minY],
+    [maxX, maxY],
+  ];
+}
+
 function useIsHoverCapable() {
   // SSR 시에는 true로 시작 — 데스크톱 가정. 마운트 후 matchMedia로 보정.
   const [capable, setCapable] = useState(true);
@@ -162,14 +190,23 @@ export default function MapPage() {
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
+  // SidePanel이 bottom sheet인지 side panel인지 — fitBounds padding 분기에 사용
+  const isNarrow = useIsNarrow();
+  const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
+  // 폴리곤 GeoJSON 캐시 — 선택된 동 bbox 계산에 사용 (querySourceFeatures는 viewport 안만 반환해서 신뢰 불가)
+  const polygonsGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
+  // 동 선택 직전 카메라 — 시트 닫을 때 복귀
+  const originalCameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
   // 다음 cash 변경 또는 mode/size 변경 시까지 유지(자동 fade-out 없음)
   const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
   const prevMatchedRef = useRef<Set<string>>(new Set());
+  const prevSelectedBjdRef = useRef<string | null>(null);
   const lastFilterCtxRef = useRef<{ mode: QueryMode; size: SizeOption } | null>(null);
 
   // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
@@ -237,13 +274,14 @@ export default function MapPage() {
       }
     });
 
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    // NavigationControl은 isNarrow 의존 별도 useEffect에서 add — 모바일 좌하단/데스크톱 우상단
 
     map.on('load', async () => {
       try {
         const res = await fetch('/api/polygons');
         if (!res.ok) throw new Error(`/api/polygons HTTP ${res.status}`);
-        const fc = await res.json();
+        const fc = (await res.json()) as GeoJSON.FeatureCollection;
+        polygonsGeoJsonRef.current = fc;
 
         map.addSource(POLYGONS_SOURCE_ID, {
           type: 'geojson',
@@ -269,6 +307,7 @@ export default function MapPage() {
             ],
             'fill-opacity': [
               'case',
+              ['==', ['feature-state', 'selected'], true], 0.85,
               ['==', ['feature-state', 'color'], 'deep_green_low'], 0.5,
               ['==', ['feature-state', 'matched'], true], 0.7,
               0.18,
@@ -281,8 +320,16 @@ export default function MapPage() {
           type: 'line',
           source: POLYGONS_SOURCE_ID,
           paint: {
-            'line-color': '#666',
-            'line-width': 0.4,
+            'line-color': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], '#0066ff',
+              '#666',
+            ],
+            'line-width': [
+              'case',
+              ['==', ['feature-state', 'selected'], true], 3,
+              0.4,
+            ],
           },
         });
 
@@ -315,6 +362,7 @@ export default function MapPage() {
         });
 
         setPolygonCount(fc.features?.length ?? 0);
+        setMapLoaded(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -328,8 +376,84 @@ export default function MapPage() {
         // mapbox 내부 cleanup이 실패해도 useEffect cleanup은 throw하지 않는다
       }
       mapRef.current = null;
+      setMapLoaded(false);
     };
   }, []);
+
+  // NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단.
+  // 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    const position: 'top-right' | 'bottom-left' = isHoverCapable ? 'top-right' : 'bottom-left';
+    if (navControlRef.current) {
+      map.removeControl(navControlRef.current);
+    }
+    const control = new mapboxgl.NavigationControl({ showCompass: false });
+    map.addControl(control, position);
+    navControlRef.current = control;
+  }, [isHoverCapable, mapLoaded]);
+
+  // 1-C) 선택된 동 polygon affordance — bjd_code promoteId 기반 feature-state 토글
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+    if (!map.getSource(POLYGONS_SOURCE_ID)) return;
+
+    if (prevSelectedBjdRef.current) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: prevSelectedBjdRef.current },
+        { selected: false },
+      );
+    }
+    if (selectedBjd) {
+      map.setFeatureState(
+        { source: POLYGONS_SOURCE_ID, id: selectedBjd },
+        { selected: true },
+      );
+    }
+    prevSelectedBjdRef.current = selectedBjd;
+  }, [selectedBjd, mapLoaded]);
+
+  // 1-D) 선택 시 폴리곤으로 fitBounds, 닫을 때 원래 카메라로 복귀
+  // padding으로 시트 영역 회피 — 모바일은 하단(시트 max 80vh), 데스크톱은 우측(side panel ~420px)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapLoaded) return;
+
+    if (selectedBjd) {
+      // 첫 선택일 때만 카메라 저장 (연속 선택 시 원래 위치 유지)
+      if (!originalCameraRef.current) {
+        const c = map.getCenter();
+        originalCameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
+      }
+      const fc = polygonsGeoJsonRef.current;
+      const feature = fc?.features.find((f) => f.properties?.bjd_code === selectedBjd);
+      const bbox = feature ? computePolygonBbox(feature.geometry) : null;
+      if (!bbox) return;
+
+      const container = map.getContainer();
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      let padding: { top: number; right: number; bottom: number; left: number };
+      if (isNarrow) {
+        // 모바일 — 시트 max 80vh 하단 점유
+        padding = { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 };
+      } else if (w <= 1024) {
+        // 좁은 데스크톱(iPad Mini portrait/landscape, iPad Pro 11 portrait)
+        padding = { top: 360, right: 440, bottom: 80, left: 80 };
+      } else {
+        // 표준 데스크톱
+        padding = { top: 80, right: 480, bottom: 80, left: 80 };
+      }
+
+      map.fitBounds(bbox, { padding, duration: 700, maxZoom: 14 });
+    } else if (originalCameraRef.current) {
+      const { center, zoom } = originalCameraRef.current;
+      map.flyTo({ center, zoom, duration: 700 });
+      originalCameraRef.current = null;
+    }
+  }, [selectedBjd, mapLoaded, isNarrow]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
@@ -408,7 +532,14 @@ export default function MapPage() {
         map.once('idle', tryApply);
         return;
       }
-      map.removeFeatureState({ source: POLYGONS_SOURCE_ID });
+      // 차분 적용 — prev에 있고 new에 없는 동의 color/matched만 해제. selected는
+      // 자연 보존(전체 wipe 회귀 대신). 슬라이더 drag 시 467개 wipe + N개 재투입을
+      // |added|+|removed|개 호출로 축소.
+      for (const code of prev) {
+        if (newSet.has(code)) continue;
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'color');
+        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'matched');
+      }
       for (const dong of matched) {
         map.setFeatureState(
           { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
@@ -482,6 +613,9 @@ export default function MapPage() {
             loading={dongDetailsLoading}
             mode={query.mode}
             size={query.size}
+            onModeChange={(mode) => setQuery((current) => (
+              current.mode === mode ? current : { ...current, mode }
+            ))}
             onClose={() => setSelectedBjd(null)}
           />
         )}
@@ -1170,6 +1304,7 @@ function SidePanel({
   loading,
   mode,
   size,
+  onModeChange,
   onClose,
 }: {
   bjdCode: string;
@@ -1178,6 +1313,7 @@ function SidePanel({
   loading: boolean;
   mode: QueryMode;
   size: SizeOption;
+  onModeChange: (mode: QueryMode) => void;
   onClose: () => void;
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
@@ -1191,7 +1327,9 @@ function SidePanel({
         right: 0,
         maxHeight: '80vh',
         padding: '8px 16px 16px',
-        background: 'rgba(255,255,255,0.98)',
+        background: 'rgba(255,255,255,0.88)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: '16px 16px 0 0',
         boxShadow: '0 -4px 20px rgba(0,0,0,0.18)',
         zIndex: 3,
@@ -1205,7 +1343,9 @@ function SidePanel({
         bottom: 12,
         width: 360,
         padding: '14px 16px',
-        background: 'rgba(255,255,255,0.97)',
+        background: 'rgba(255,255,255,0.86)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
         borderRadius: 8,
         boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
         zIndex: 2,
@@ -1273,24 +1413,7 @@ function SidePanel({
           </button>
         </div>
 
-      {dong && (
-        <div
-          style={{
-            marginTop: 8,
-            padding: '6px 8px',
-            background: '#f4f6f4',
-            borderLeft: '3px solid #2d8a4f',
-            fontSize: 12,
-          }}
-        >
-          {dong.evidence}
-          <div style={{ marginTop: 2, color: '#555' }}>
-            중위 {(dong.median_man / 10000).toFixed(1)}억 · {dong.confidence}
-            {dong.median_build_year && ` · 중위 ${dong.median_build_year}년식`}
-            {dong.build_year_stddev != null && dong.build_year_stddev > 10 && ' ⚠️ 신구축 혼재'}
-          </div>
-        </div>
-      )}
+      {dong && <EvidenceCard dong={dong} mode={mode} />}
 
       {details && details.distributions.length > 0 && (
         <DistributionChart distributions={details.distributions} mode={mode} size={size} />
@@ -1316,40 +1439,13 @@ function SidePanel({
         </ol>
       )}
 
-      <h4 style={{ marginTop: 14, marginBottom: 6, fontSize: 13 }}>최근 거래 10건</h4>
-      {loading && <div style={{ color: '#888' }}>로드 중...</div>}
-      {!loading && details && details.recent_transactions.length === 0 && (
-        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-      )}
-      {!loading && details && details.recent_transactions.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #eee', textAlign: 'left' }}>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>모드</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {details.recent_transactions.map((tx, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f4f4f4' }}>
-                <td style={{ padding: '4px 2px', color: tx.mode === 'TRADE' ? '#2d8a4f' : '#777' }}>
-                  {tx.mode === 'TRADE' ? '매' : '전'}
-                </td>
-                <td style={{ padding: '4px 2px' }}>
-                  {tx.complex_name}
-                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                </td>
-                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                  {(tx.amount_man / 10000).toFixed(1)}억
-                </td>
-                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <RecentTxTabs
+        trades={details?.recent_trades}
+        jeonse={details?.recent_jeonse}
+        loading={loading}
+        mode={mode}
+        onModeChange={onModeChange}
+      />
 
       {details && (
         <div style={{ marginTop: 12, fontSize: 11, color: '#888' }}>
@@ -1483,6 +1579,238 @@ function DistributionChart({
         })}
       </svg>
     </div>
+  );
+}
+
+type ChipTone = 'high' | 'low' | 'insufficient' | 'neutral' | 'warn';
+
+const CHIP_PALETTE: Record<ChipTone, { bg: string; fg: string; border: string }> = {
+  high: { bg: '#e6f4e8', fg: '#1f6e3a', border: '#b6dcc1' },
+  low: { bg: '#fff4d6', fg: '#7a5a16', border: '#e6cc8a' },
+  insufficient: { bg: '#f0f0f0', fg: '#555', border: '#d0d0d0' },
+  neutral: { bg: '#eef2f7', fg: '#3a4a5d', border: '#c7d4e2' },
+  warn: { bg: '#fbeaea', fg: '#a13030', border: '#eebebe' },
+};
+
+const CONFIDENCE_LABEL: Record<'high' | 'low' | 'insufficient', string> = {
+  high: '신뢰도 high',
+  low: '신뢰도 low',
+  insufficient: '표본 부족',
+};
+
+function Chip({ label, tone }: { label: string; tone: ChipTone }) {
+  const c = CHIP_PALETTE[tone];
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '2px 8px',
+        background: c.bg,
+        color: c.fg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 600,
+        lineHeight: 1.45,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function EvidenceCard({
+  dong,
+  mode,
+}: {
+  dong: AffordableDongResponse;
+  mode: QueryMode;
+}) {
+  const eok = dong.median_man / 10000;
+  const showStddevWarn = dong.build_year_stddev != null && dong.build_year_stddev > 10;
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: '10px 12px',
+        background: '#f4f6f4',
+        borderLeft: '3px solid #2d8a4f',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: '#555',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}
+      >
+        동 중위 ({mode === 'trade' ? '매매' : '전세'})
+      </div>
+      <div
+        style={{
+          fontSize: 26,
+          fontWeight: 700,
+          color: '#1a1a1a',
+          lineHeight: 1.1,
+          marginTop: 2,
+        }}
+      >
+        {eok.toFixed(1)}억
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        <Chip label={CONFIDENCE_LABEL[dong.confidence]} tone={dong.confidence} />
+        {dong.median_build_year != null && (
+          <Chip label={`${dong.median_build_year}년식`} tone="neutral" />
+        )}
+        {showStddevWarn && <Chip label="⚠ 신구축 혼재" tone="warn" />}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: '#666', lineHeight: 1.5 }}>
+        {dong.evidence}
+      </div>
+    </div>
+  );
+}
+
+const TAB_ACCENT: Record<QueryMode, string> = {
+  trade: '#2d8a4f',
+  jeonse: '#5577c8',
+};
+
+function RecentTxTabs({
+  trades,
+  jeonse,
+  loading,
+  mode,
+  onModeChange,
+}: {
+  trades: RecentTransaction[] | undefined;
+  jeonse: RecentTransaction[] | undefined;
+  loading: boolean;
+  mode: QueryMode;
+  onModeChange: (mode: QueryMode) => void;
+}) {
+  const rows = mode === 'trade' ? trades : jeonse;
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        role="tablist"
+        aria-label="최근 거래"
+        style={{
+          display: 'flex',
+          gap: 0,
+          borderBottom: '1px solid #d8d8d8',
+          marginBottom: 8,
+        }}
+      >
+        <RecentTabButton
+          tab="trade"
+          label="매매"
+          active={mode === 'trade'}
+          loading={loading}
+          count={trades?.length ?? 0}
+          onSelect={onModeChange}
+        />
+        <RecentTabButton
+          tab="jeonse"
+          label="전세"
+          active={mode === 'jeonse'}
+          loading={loading}
+          count={jeonse?.length ?? 0}
+          onSelect={onModeChange}
+        />
+      </div>
+      <div
+        role="tabpanel"
+        aria-label={`최근 ${mode === 'trade' ? '매매' : '전세'}`}
+        style={{
+          background: 'rgba(255,255,255,0.55)',
+          padding: '8px 10px',
+          borderRadius: 6,
+        }}
+      >
+        {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
+        {!loading && (!rows || rows.length === 0) && (
+          <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+        )}
+        {!loading && rows && rows.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+                <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((tx, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                  <td style={{ padding: '4px 2px' }}>
+                    {tx.complex_name}
+                    <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                  </td>
+                  <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                    {(tx.amount_man / 10000).toFixed(1)}억
+                  </td>
+                  <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentTabButton({
+  tab,
+  label,
+  active,
+  loading,
+  count,
+  onSelect,
+}: {
+  tab: QueryMode;
+  label: string;
+  active: boolean;
+  loading: boolean;
+  count: number;
+  onSelect: (tab: QueryMode) => void;
+}) {
+  const accent = TAB_ACCENT[tab];
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => onSelect(tab)}
+      style={{
+        flex: 1,
+        padding: '8px 10px',
+        border: 'none',
+        borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
+        background: 'transparent',
+        color: active ? accent : '#666',
+        fontWeight: active ? 700 : 500,
+        fontSize: 13,
+        cursor: 'pointer',
+        marginBottom: -1,
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'center',
+        gap: 5,
+      }}
+    >
+      <span>{label}</span>
+      {!loading && (
+        <span style={{ fontWeight: 400, fontSize: 11, color: active ? '#666' : '#999' }}>
+          {count}건
+        </span>
+      )}
+    </button>
   );
 }
 
