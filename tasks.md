@@ -10,10 +10,16 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (cron stale alert 도입 직후)**:
-1. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — 매·전 분리는 v0.7.0에서 완료, 다음 칸은 10건 이후 페이지네이션 (`txCursor` 또는 `txOffset`)
-2. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
-3. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
+**현재 우선순위 추천 (2026-05-09 갱신, Production latency 측정 직후)**:
+
+🚨 **최우선 — Production 첫 로딩 latency 심각** (2026-05-09 측정):
+- `/api/affordable` 첫 호출 **3.46s** (Server-Timing: stats=1788.8 fresh=1572.4 db=1788.8) — Neon 콜드 + Vercel 함수 콜드
+- `/api/polygons` 첫 호출 **10.53s · 1142kB** — 단일 응답 dominant cost. 임장 후보 1명에게도 보여주기 어려운 수준
+
+1. 🔴 **H + I 묶음 별도 PR** (PR #16 merge 직후 진행) — H의 D(affordable edge cache) + E(인덱스) + I 전체(polygons CDN cache + precision 축소). 임장 검증·외부 공유 전 필수 통과
+2. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — H+I 처리 후 재진입
+3. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — H+I로 latency 정상화 후 진행 의미 있음
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -153,13 +159,14 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 **트리거**: 사용자가 "첫 로딩 느리다" 1회 인지(2026-05-07). 임장 1회 검증 직후 또는 외부 공유 직전에 D까지 처리.
 
 **진척**:
-- [x] **B. Promise.all 병렬화** (PR #16, 2026-05-09) — 두 쿼리(`mv_dong_stats` JOIN + `MAX(contract_date)`)를 `Promise.all`로 묶음. 로컬 dev 측정 `stats=65.7 fresh=49.2 db=65.8(=max) eval=0.1` — 병렬 작동 확인
-- [x] **G 부분 — Server-Timing 헤더** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. DevTools Network → Timing 탭 자동 시각화. e2e 회귀 가드 추가
-- [~] **A 진단** (2026-05-09 진행) — Preview URL 첫 호출 Waiting **1.98s** 확인 → Neon 콜드 dominant 거의 확정. warm 호출(M↔S 토글) 비교로 마무리 진단 후 D 진입 결정
+- [x] **B. Promise.all 병렬화** (PR #16, 2026-05-09) — 두 쿼리(`mv_dong_stats` JOIN + `MAX(contract_date)`)를 `Promise.all`로 묶음. Production 첫 호출 측정 `stats=1788.8 fresh=1572.4 db=1788.8(=max) eval=1.3` — 병렬 작동 입증, sequential이었으면 db≈3361. **fresh 흡수로 ~1.57s 절감**
+- [x] **G 부분 — Server-Timing 헤더 + body `_timing` fallback** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. Vercel runtime이 헤더 strip하는 케이스 대비 응답 body에도 `_timing` 박음. DevTools Network → Preview/Response 탭에서 즉시 노출. e2e 회귀 가드 추가
+- [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
+- [ ] **D + E 적용** (별도 PR 예정) — D는 모든 호출 ~50ms 응답, E는 warm 700ms 베이스라인 단축. I 섹션 polygons와 묶음 PR로 진행
 
-### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규)
+### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 
-**현상**: 첫 페이지 진입 시 `/api/polygons` 응답 ~1.5MB·**~1.7~2초** 소요(Network 탭 capture 기준). 467개 법정동 폴리곤은 V-World LSMD 적재 후 거의 변경 없는 정적 데이터인데 매 요청마다 DB 풀스캔 + `ST_AsGeoJSON` 직렬화 + Node `JSON.parse` 467회 왕복 발생. 응답 헤더에 `Cache-Control: public, max-age=86400` 박혀있으나 `dynamic = 'force-dynamic'`이라 Vercel CDN edge cache 동작 확인 필요.
+**현상**: Production 첫 호출 측정 **10.53s · 1142kB** (2026-05-09). 단일 응답이 affordable(3.46s)보다 3배 더 느려 첫 로딩 dominant cost. 467개 법정동 폴리곤은 V-World LSMD 적재 후 거의 변경 없는 정적 데이터인데 매 요청마다 DB 풀스캔 + `ST_AsGeoJSON` 직렬화 + Node `JSON.parse` 467회 왕복 발생. 응답 헤더에 `Cache-Control: public, max-age=86400` 박혀있으나 `dynamic = 'force-dynamic'`이라 Vercel CDN edge cache 무력화. Mr. Song "성능 심각한데?" 1차 인지.
 
 **가설별 진단·개선 후보**:
 
@@ -179,7 +186,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 4. D — A로 해결되면 후순위
 5. F — 비상 카드
 
-**트리거**: Mr. Song이 화면 Network 탭에서 polygons 응답 1342kB·~2s 소요 인지(2026-05-09). affordable PR #16 merge 후 별도 PR로 진행.
+**트리거**: Mr. Song이 Production Network 탭에서 polygons **10.53s · 1142kB** 측정 후 "성능 심각한데?" 1차 인지(2026-05-09). 임장 검증·외부 공유 진입 전 통과 필수. affordable PR #16 merge 후 H 섹션 D+E와 묶음 PR로 진행.
 
 ---
 
