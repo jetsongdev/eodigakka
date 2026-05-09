@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - mapbox-gl을 next/dynamic으로 분리해 초기 JS 청크 1.7MB 제거
+## [v0.7.1] - 2026-05-09 - mapbox-gl을 next/dynamic으로 분리해 초기 JS 청크 1.7MB 제거
 
 ### 성능
 - mapbox-gl (1.7MB raw) 을 next/dynamic + ssr:false 로 분리, 초기 JS 청크에서 제거
