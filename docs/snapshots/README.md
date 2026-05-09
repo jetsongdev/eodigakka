@@ -21,3 +21,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 11 | [fitBounds padding 보정 + selected 강조 회귀 fix](11-fitbounds-fix/) | 2026-05-07 | 1997957 | 1 (bug fix) |
 | 12 | [Mapbox zoom 버튼 30×30 → 44×44 (touch target)](12-zoom-44px/) | 2026-05-09 | 5c38bd1 | 1 (touch UX) |
 | 13 | [SidePanel 최근 거래 — 탭 → 매·전 동시 섹션](13-sidepanel-recent-tx-sections/) | 2026-05-09 | c369b2c | 1 (sidepanel info hierarchy 라운드 3) |
+| 14 | [단일+collapsed 시도 revert 후 회귀 검증 (13과 동일)](14-recent-tx-revert-verify/) | 2026-05-09 | 36ca2c6 | 1 (UX 회귀 검증) |
