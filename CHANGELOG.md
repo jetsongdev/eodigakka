@@ -10,7 +10,7 @@
 
 ---
 
-## [v0.7.1] - 2026-05-09 - chore(ops): ETL 데이터 신선도 알림 워크플로 추가
+## [Unreleased] - chore(ops): ETL 데이터 신선도 알림 워크플로 추가
 
 `.github/workflows/etl-stale-alert.yml` 신규. KST 05:00 (`0 20 * * *` UTC, ETL firing 03:00 + 2h GHA scheduler 지연 쿠션) 발사. `psql`로 `etl_job_status.last_succeeded_at`이 `NOW() - INTERVAL '25 hours'`보다 오래되거나 NULL이면 stale 판정 → label `etl-stale` 단일 open 이슈로 fan-out (dedup으로 outage N일 동안 같은 이슈에 모이고, close 시 다음 stale에 자동 재생성). `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 포맷을 stale 발생 전에 수동 검증. label은 워크플로 첫 step에서 `gh label create --force`로 idempotent하게 보장. Healthchecks.io ping이 못 잡는 silent success(ETL exit 0이지만 `update_etl_status` 미도달) 보강 — 데이터 freshness 자체를 DB 측에서 본다.
 
@@ -21,6 +21,13 @@
 - cron 시점: KST 04:00이 아닌 **KST 05:00** — GHA scheduler 지연 windows(15~60분)와 ETL 자체 지연 둘 다 흡수. 정확성은 firing 시점이 아닌 `25 hours` interval 기준으로 보장
 - stale 판정 기준: 절대 시각("오늘 KST 03:00 이전") 아닌 **상대 interval `25 hours`** — clock math 회피 + NULL 안전(`COALESCE(..., '1970-01-01')`)
 - 알림 채널: Telegram 아닌 GH issue 단독 — outage가 끝나고도 trail이 남고 close로 자연 ack됨. Telegram fan-out은 필요 시 후속
+
+## [v0.7.1] - 2026-05-09 - mapbox-gl을 next/dynamic으로 분리해 초기 JS 청크 1.7MB 제거
+
+### 성능
+- mapbox-gl (1.7MB raw) 을 next/dynamic + ssr:false 로 분리, 초기 JS 청크에서 제거
+- 베이스라인: 가장 큰 client chunk 1,744KB raw / 475KB gz (97%가 mapbox-gl)
+- 모바일 LCP 5.5s → 개선 예상 (Lighthouse 재측정은 배포 후)
 
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
