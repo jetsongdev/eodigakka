@@ -139,47 +139,50 @@ async function openSidePanelByMapClick(page: Page) {
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 }
 
-test('SidePanel — 기본은 매매만 펼치고 전세는 보조 collapsed로 표시한다', async ({ page }) => {
+test('SidePanel — 최근 거래 섹션은 매매와 전세를 동시에 표시한다', async ({ page }) => {
   await openSidePanelByMapClick(page);
 
   const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
   const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
-  const otherMode = page.locator('details').filter({ hasText: /다른 모드 거래 보기 — 전세 \d+건/ });
 
-  await expect(tradeSection).toBeVisible();
-  await expect(page.getByText(/다른 모드 거래 보기 — 전세 \d+건/)).toBeVisible();
-  await expect(otherMode).not.toHaveAttribute('open', '');
-  await expect(jeonseSection).toBeHidden();
-});
-
-test('SidePanel — 보조 거래 펼치기 버튼 클릭 시 전세 섹션도 보인다', async ({ page }) => {
-  await openSidePanelByMapClick(page);
-
-  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
-  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
-  const otherMode = page.locator('details').filter({ hasText: /다른 모드 거래 보기 — 전세 \d+건/ });
-
-  await page.getByText(/다른 모드 거래 보기 — 전세 \d+건/).click();
-
-  await expect(otherMode).toHaveAttribute('open', '');
   await expect(tradeSection).toBeVisible();
   await expect(jeonseSection).toBeVisible();
 });
 
-test('SidePanel — 헤더 mode 토글 시 주 섹션이 바뀌고 보조는 closed로 리셋된다', async ({ page }) => {
+test('SidePanel — 헤더 mode 토글 후에도 최근 거래 섹션이 유지된다', async ({ page }) => {
   await openSidePanelByMapClick(page);
 
-  await page.getByText(/다른 모드 거래 보기 — 전세 \d+건/).click();
-  await expect(page.locator('details').filter({ hasText: /다른 모드 거래 보기 — 전세 \d+건/ }))
-    .toHaveAttribute('open', '');
+  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
+  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
+  const aside = page.locator('aside[role="complementary"]');
+
+  await page.getByRole('button', { name: '전세' }).click();
+
+  await expect
+    .poll(async () => (await evidence.textContent()) ?? '')
+    .toContain('전세 ·');
+  // 사이드패널이 닫히지 않고 같은 dong에 대해 유지 — 2-B 차분 적용으로 selected
+  // feature-state가 affordable refetch 후에도 보존되는 회귀 가드
+  await expect(aside).toBeVisible();
+  await expect(tradeSection).toBeVisible();
+  await expect(jeonseSection).toBeVisible();
+});
+
+test('SidePanel — 헤더 mode 토글 후 열어도 최근 거래 섹션은 양쪽 모두 보인다', async ({ page }) => {
+  await openMap(page);
+
+  // 1. 헤더 mode를 전세로 변경
   await page.getByRole('button', { name: '전세' }).click();
   await expect
     .poll(async () => (await page.getByText(/(매매|전세) · .+~.+ · /).textContent()) ?? '')
     .toContain('전세 ·');
 
+  // 2. 폴리곤 클릭으로 SidePanel 열기
+  await clickPolygon(page);
+  await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
+
+  // 3. 두 거래 섹션이 함께 보인다
+  await expect(page.getByRole('heading', { name: /매매 최근 10건/ })).toBeVisible();
   await expect(page.getByRole('heading', { name: /전세 최근 10건/ })).toBeVisible();
-  await expect(page.getByText(/다른 모드 거래 보기 — 매매 \d+건/)).toBeVisible();
-  await expect(page.locator('details').filter({ hasText: /다른 모드 거래 보기 — 매매 \d+건/ }))
-    .not.toHaveAttribute('open', '');
-  await expect(page.getByRole('heading', { name: /매매 최근 10건/ })).toBeHidden();
 });

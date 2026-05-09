@@ -10,13 +10,13 @@
 
 ---
 
-## [Unreleased] - SidePanel 최근 거래 — 헤더 mode 따라 단일 섹션 + 보조 collapsed
+## [Unreleased] - SidePanel 최근 거래 — 탭 → 매·전 동시 섹션
 
-탭 토글로 한 번에 한 종류만 보던 "최근 거래" 영역을 헤더 mode에 맞는 주 섹션과 보조 mode collapsed 영역으로 재구성. 헤더 mode는 `/api/affordable`·TOP5·분포 차트 primary에서 계속 단일 source of truth.
+탭 토글로 한 번에 한 종류만 보던 "최근 거래" 영역을 매매·전세 두 섹션으로 분리해 동시 노출. 모드 전환 클릭 없이 두 흐름을 한 화면에서 비교 가능. 헤더 mode는 `/api/affordable`·TOP5·분포 차트 primary에서 계속 단일 source of truth.
 
 ### 변경
-- `web/app/page.tsx` — `RecentTxTabs` → `RecentTxSections` rename. 헤더 mode 따라 주 섹션만 펼침 + 보조 모드는 collapsed `<details>` 펼치기 버튼. `onModeChange` props 제거, `mode` props는 주/보조 섹션 선택에 사용. 탭 UI · `RecentTabButton` 폐기. 매매·전세 섹션 헤더에 accent 색상 인디케이터(매매 #2d8a4f / 전세 #5577c8) + 건수 라벨. 각 섹션 내부 표 컬럼은 기존과 동일(단지·평형 / 금액 / 일자)
-- `web/tests/e2e/map.spec.ts` — 탭 기반 검증(`role=tablist`, `aria-selected`)을 `<details>` 보조 섹션 기반으로 교체. 기본 collapsed 상태, 보조 섹션 펼침, 헤더 mode 토글 시 closed 리셋을 검증
+- `web/app/page.tsx` — `RecentTxTabs` → `RecentTxSections` rename, `mode`/`onModeChange` props 제거. 탭 UI · `RecentTabButton` · `TAB_ACCENT` 폐기. 매매·전세 섹션 헤더에 accent 색상 인디케이터(매매 #2d8a4f / 전세 #5577c8) + 건수 라벨. 각 섹션 내부 표 컬럼은 기존과 동일(단지·평형 / 금액 / 일자)
+- `web/tests/e2e/map.spec.ts` — 탭 기반 검증(`role=tablist`, `aria-selected`)을 섹션 헤더 기반(`role=heading`, `매매 최근 10건` / `전세 최근 10건`)으로 교체. 헤더 mode 토글 후에도 두 섹션 모두 유지되는 회귀 가드 추가
 
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
