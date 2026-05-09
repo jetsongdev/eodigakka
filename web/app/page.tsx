@@ -981,7 +981,6 @@ function SidePanel({
   loading,
   mode,
   size,
-  onModeChange,
   onClose,
 }: {
   bjdCode: string;
@@ -1116,12 +1115,10 @@ function SidePanel({
         </ol>
       )}
 
-      <RecentTxTabs
+      <RecentTxSections
         trades={details?.recent_trades}
         jeonse={details?.recent_jeonse}
         loading={loading}
-        mode={mode}
-        onModeChange={onModeChange}
       />
 
       {details && (
@@ -1157,8 +1154,8 @@ function DistributionChart({
   const trade = pickFor('TRADE');
   const jeonse = pickFor('JEONSE');
   const series: Array<{ label: string; color: string; row: DongDistribution; primary: boolean }> = [];
-  if (trade) series.push({ label: '매매', color: '#2d8a4f', row: trade, primary: mode === 'trade' });
-  if (jeonse) series.push({ label: '전세', color: '#5577c8', row: jeonse, primary: mode === 'jeonse' });
+  if (trade) series.push({ label: '매매', color: MODE_ACCENT.trade, row: trade, primary: mode === 'trade' });
+  if (jeonse) series.push({ label: '전세', color: MODE_ACCENT.jeonse, row: jeonse, primary: mode === 'jeonse' });
 
   if (series.length === 0) return null;
 
@@ -1350,144 +1347,96 @@ function EvidenceCard({
   );
 }
 
-const TAB_ACCENT: Record<QueryMode, string> = {
+const MODE_ACCENT: Record<QueryMode, string> = {
   trade: '#2d8a4f',
   jeonse: '#5577c8',
 };
 
-function RecentTxTabs({
+function RecentTxSections({
   trades,
   jeonse,
   loading,
-  mode,
-  onModeChange,
 }: {
   trades: RecentTransaction[] | undefined;
   jeonse: RecentTransaction[] | undefined;
   loading: boolean;
-  mode: QueryMode;
-  onModeChange: (mode: QueryMode) => void;
 }) {
-  const rows = mode === 'trade' ? trades : jeonse;
+  const sections = [
+    { label: '매매 최근 10건', rows: trades ?? [], accent: MODE_ACCENT.trade },
+    { label: '전세 최근 10건', rows: jeonse ?? [], accent: MODE_ACCENT.jeonse },
+  ];
 
   return (
     <div style={{ marginTop: 14 }}>
-      <div
-        role="tablist"
-        aria-label="최근 거래"
-        style={{
-          display: 'flex',
-          gap: 0,
-          borderBottom: '1px solid #d8d8d8',
-          marginBottom: 8,
-        }}
-      >
-        <RecentTabButton
-          tab="trade"
-          label="매매"
-          active={mode === 'trade'}
-          loading={loading}
-          count={trades?.length ?? 0}
-          onSelect={onModeChange}
-        />
-        <RecentTabButton
-          tab="jeonse"
-          label="전세"
-          active={mode === 'jeonse'}
-          loading={loading}
-          count={jeonse?.length ?? 0}
-          onSelect={onModeChange}
-        />
-      </div>
-      <div
-        role="tabpanel"
-        aria-label={`최근 ${mode === 'trade' ? '매매' : '전세'}`}
-        style={{
-          background: 'rgba(255,255,255,0.55)',
-          padding: '8px 10px',
-          borderRadius: 6,
-        }}
-      >
-        {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
-        {!loading && (!rows || rows.length === 0) && (
-          <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-        )}
-        {!loading && rows && rows.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
-                <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-                <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-                <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((tx, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                  <td style={{ padding: '4px 2px' }}>
-                    {tx.complex_name}
-                    <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                  </td>
-                  <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                    {(tx.amount_man / 10000).toFixed(1)}억
-                  </td>
-                  <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {sections.map((section, sectionIndex) => (
+        <section key={section.label} style={{ marginTop: sectionIndex === 0 ? 0 : 12 }}>
+          <h4
+            style={{
+              marginTop: 0,
+              marginBottom: 6,
+              fontSize: 13,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 999,
+                background: section.accent,
+                display: 'inline-block',
+              }}
+            />
+            <span>{section.label}</span>
+            {!loading && (
+              <span style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>
+                {section.rows?.length ?? 0}건
+              </span>
+            )}
+          </h4>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.55)',
+              padding: '8px 10px',
+              borderRadius: 6,
+            }}
+          >
+            {loading ? (
+              <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>
+            ) : section.rows.length === 0 ? (
+              <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
+                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+                    <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {section.rows.map((tx, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                      <td style={{ padding: '4px 2px' }}>
+                        {tx.complex_name}
+                        <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                      </td>
+                      <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                        {(tx.amount_man / 10000).toFixed(1)}억
+                      </td>
+                      <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      ))}
     </div>
-  );
-}
-
-function RecentTabButton({
-  tab,
-  label,
-  active,
-  loading,
-  count,
-  onSelect,
-}: {
-  tab: QueryMode;
-  label: string;
-  active: boolean;
-  loading: boolean;
-  count: number;
-  onSelect: (tab: QueryMode) => void;
-}) {
-  const accent = TAB_ACCENT[tab];
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={() => onSelect(tab)}
-      style={{
-        flex: 1,
-        padding: '8px 10px',
-        border: 'none',
-        borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
-        background: 'transparent',
-        color: active ? accent : '#666',
-        fontWeight: active ? 700 : 500,
-        fontSize: 13,
-        cursor: 'pointer',
-        marginBottom: -1,
-        display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'center',
-        gap: 5,
-      }}
-    >
-      <span>{label}</span>
-      {!loading && (
-        <span style={{ fontWeight: 400, fontSize: 11, color: active ? '#666' : '#999' }}>
-          {count}건
-        </span>
-      )}
-    </button>
   );
 }
 

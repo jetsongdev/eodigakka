@@ -227,6 +227,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - [ ] **액션 버튼**: "Claude로 더 보기" / "RTMS에서 보기" / "임장 후보 ⭐"
   - [x] **최근 거래 매·전 분리 표시** (2026-05-07) — API 응답: `recent_transactions[]` 단일 배열 폐기, `recent_trades: TxRow[10]` + `recent_jeonse: TxRow[10]` 두 배열로 분리. `route.ts`에서 두 별도 LIMIT 10 query (Promise.all 병렬). e2e 검증 추가(`api.spec.ts`).
   - [x] **탭 UI 전환** (2026-05-07) — 두 섹션 stack을 `RecentTxTabs` 컴포넌트(role=tablist + tab × 2)로 교체. 활성 탭 underline은 매매=녹색/전세=파랑. **default 탭 = 헤더 mode와 동기화** (`useEffect([defaultTab])`로 mode 토글 시 따라감). 탭 콘텐츠 영역은 `rgba(255,255,255,0.55)` 살짝 투명한 시트.
+  - [x] **탭 → 매·전 동시 섹션** (2026-05-09) — 탭 토글 폐기. 두 섹션(매매·전세 각 LIMIT 10) 동시 노출로 회귀. 헤더 mode는 `/api/affordable`·TOP5·DistributionChart primary에서만 단일 SoT. (단일 섹션 + collapsed 보조 디자인은 한 번 시도 후 revert — 공공데이터에 매·전 외 다른 모드가 없어 "다른 모드" 추상화가 과함, snapshot 13)
+  - [ ] **검색 축 전환 — 모드 기준 → 금액 기준** (후속, snapshot 13 회고에서) — 현재는 헤더 매매·전세 토글로 모드를 정한 뒤 그 모드의 가격 분포를 본다. 사용자 의사결정 흐름은 "내가 가진 N억으로 어디 갈 수 있나" → 모드를 먼저 고르는 게 부자연스러움. 자금 N억 입력하면 매매·전세 모두에서 후보 동을 한 번에 보여주는 축으로 전환 검토. 영향 범위: 헤더 mode 토글 의미·`/api/affordable` mode 파라미터·DistributionChart primary 기준·SidePanel 정보구조·MV 색칠 기준 전체. 별도 ADR + brainstorming 라운드 필요.
   - [x] **사이드패널 시트 투명도** (2026-05-07) — 데스크톱 0.97 → 0.86, 모바일 0.98 → 0.88로 낮추고 `backdropFilter: blur(6px)` 추가. 뒤 지도가 살짝 비치면서 가독성은 blur로 보존.
   - [ ] **최근 거래 더보기**: 10건 이후 페이지네이션. 시트 안에서 "더보기" 버튼 → 다음 10건 append. cursor는 `(contract_date, id)` 또는 `OFFSET` 기반
     - API: `/api/dong/[bjd]/complexes?txCursor=<base64>&txMode=trade|jeonse` 또는 `?txOffset=10`

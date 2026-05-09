@@ -139,41 +139,37 @@ async function openSidePanelByMapClick(page: Page) {
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 }
 
-test('SidePanel — 매·전 탭 default는 헤더 mode(=매매)와 일치', async ({ page }) => {
+test('SidePanel — 최근 거래 섹션은 매매와 전세를 동시에 표시한다', async ({ page }) => {
   await openSidePanelByMapClick(page);
 
-  const tablist = page.getByRole('tablist', { name: '최근 거래' });
-  await expect(tablist).toBeVisible();
+  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
+  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
 
-  const tradeTab = tablist.getByRole('tab', { name: /매매/ });
-  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
-
-  await expect(tradeTab).toHaveAttribute('aria-selected', 'true');
-  await expect(jeonseTab).toHaveAttribute('aria-selected', 'false');
+  await expect(tradeSection).toBeVisible();
+  await expect(jeonseSection).toBeVisible();
 });
 
-test('SidePanel — 비활성 탭 클릭 시 활성 탭과 헤더 mode가 함께 바뀐다', async ({ page }) => {
+test('SidePanel — 헤더 mode 토글 후에도 최근 거래 섹션이 유지된다', async ({ page }) => {
   await openSidePanelByMapClick(page);
 
-  const tablist = page.getByRole('tablist', { name: '최근 거래' });
-  const tradeTab = tablist.getByRole('tab', { name: /매매/ });
-  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
+  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
+  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
   const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   const aside = page.locator('aside[role="complementary"]');
 
-  await jeonseTab.click();
+  await page.getByRole('button', { name: '전세' }).click();
 
-  await expect(jeonseTab).toHaveAttribute('aria-selected', 'true');
-  await expect(tradeTab).toHaveAttribute('aria-selected', 'false');
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
     .toContain('전세 ·');
   // 사이드패널이 닫히지 않고 같은 dong에 대해 유지 — 2-B 차분 적용으로 selected
   // feature-state가 affordable refetch 후에도 보존되는 회귀 가드
   await expect(aside).toBeVisible();
+  await expect(tradeSection).toBeVisible();
+  await expect(jeonseSection).toBeVisible();
 });
 
-test('SidePanel — 헤더 mode 토글 시 default 탭이 따라간다', async ({ page }) => {
+test('SidePanel — 헤더 mode 토글 후 열어도 최근 거래 섹션은 양쪽 모두 보인다', async ({ page }) => {
   await openMap(page);
 
   // 1. 헤더 mode를 전세로 변경
@@ -186,8 +182,7 @@ test('SidePanel — 헤더 mode 토글 시 default 탭이 따라간다', async (
   await clickPolygon(page);
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 
-  // 3. default 탭이 전세로 잡혀야 함
-  const tablist = page.getByRole('tablist', { name: '최근 거래' });
-  const jeonseTab = tablist.getByRole('tab', { name: /전세/ });
-  await expect(jeonseTab).toHaveAttribute('aria-selected', 'true');
+  // 3. 두 거래 섹션이 함께 보인다
+  await expect(page.getByRole('heading', { name: /매매 최근 10건/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /전세 최근 10건/ })).toBeVisible();
 });

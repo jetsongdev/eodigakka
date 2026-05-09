@@ -10,6 +10,14 @@
 
 ---
 
+## [v0.8.0] - 2026-05-09 - SidePanel 최근 거래 — 탭 → 매·전 동시 섹션
+
+탭 토글로 한 번에 한 종류만 보던 "최근 거래" 영역을 매매·전세 두 섹션으로 분리해 동시 노출. 모드 전환 클릭 없이 두 흐름을 한 화면에서 비교 가능. 헤더 mode는 `/api/affordable`·TOP5·분포 차트 primary에서 계속 단일 source of truth.
+
+### 변경
+- `web/app/page.tsx` — `RecentTxTabs` → `RecentTxSections` rename, `mode`/`onModeChange` props 제거. 탭 UI · `RecentTabButton` · `TAB_ACCENT` 폐기. 매매·전세 섹션 헤더에 accent 색상 인디케이터(매매 #2d8a4f / 전세 #5577c8) + 건수 라벨. 각 섹션 내부 표 컬럼은 기존과 동일(단지·평형 / 금액 / 일자)
+- `web/tests/e2e/map.spec.ts` — 탭 기반 검증(`role=tablist`, `aria-selected`)을 섹션 헤더 기반(`role=heading`, `매매 최근 10건` / `전세 최근 10건`)으로 교체. 헤더 mode 토글 후에도 두 섹션 모두 유지되는 회귀 가드 추가
+
 ## [v0.7.2] - 2026-05-09 - chore(ops): ETL 데이터 신선도 알림 워크플로 추가
 
 `.github/workflows/etl-stale-alert.yml` 신규. KST 05:00 (`0 20 * * *` UTC, ETL firing 03:00 + 2h GHA scheduler 지연 쿠션) 발사. `psql`로 `etl_job_status.last_succeeded_at`이 `NOW() - INTERVAL '25 hours'`보다 오래되거나 NULL이면 stale 판정 → label `etl-stale` 단일 open 이슈로 fan-out (dedup으로 outage N일 동안 같은 이슈에 모이고, close 시 다음 stale에 자동 재생성). `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 포맷을 stale 발생 전에 수동 검증. label은 워크플로 첫 step에서 `gh label create --force`로 idempotent하게 보장. Healthchecks.io ping이 못 잡는 silent success(ETL exit 0이지만 `update_etl_status` 미도달) 보강 — 데이터 freshness 자체를 DB 측에서 본다.
