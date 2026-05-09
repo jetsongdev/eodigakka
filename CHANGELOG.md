@@ -10,6 +10,13 @@
 
 ---
 
+## [v0.7.1] - 2026-05-09 - mapbox-gl을 next/dynamic으로 분리해 초기 JS 청크 1.7MB 제거
+
+### 성능
+- mapbox-gl (1.7MB raw) 을 next/dynamic + ssr:false 로 분리, 초기 JS 청크에서 제거
+- 베이스라인: 가장 큰 client chunk 1,744KB raw / 475KB gz (97%가 mapbox-gl)
+- 모바일 LCP 5.5s → 개선 예상 (Lighthouse 재측정은 배포 후)
+
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 
 ### 변경
