@@ -153,6 +153,35 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 **트리거**: 사용자가 "첫 로딩 느리다" 1회 인지(2026-05-07). 임장 1회 검증 직후 또는 외부 공유 직전에 D까지 처리.
 
+**진척**:
+- [x] **B. Promise.all 병렬화** (PR #16, 2026-05-09) — 두 쿼리(`mv_dong_stats` JOIN + `MAX(contract_date)`)를 `Promise.all`로 묶음. 로컬 dev 측정 `stats=65.7 fresh=49.2 db=65.8(=max) eval=0.1` — 병렬 작동 확인
+- [x] **G 부분 — Server-Timing 헤더** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. DevTools Network → Timing 탭 자동 시각화. e2e 회귀 가드 추가
+- [~] **A 진단** (2026-05-09 진행) — Preview URL 첫 호출 Waiting **1.98s** 확인 → Neon 콜드 dominant 거의 확정. warm 호출(M↔S 토글) 비교로 마무리 진단 후 D 진입 결정
+
+### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규)
+
+**현상**: 첫 페이지 진입 시 `/api/polygons` 응답 ~1.5MB·**~1.7~2초** 소요(Network 탭 capture 기준). 467개 법정동 폴리곤은 V-World LSMD 적재 후 거의 변경 없는 정적 데이터인데 매 요청마다 DB 풀스캔 + `ST_AsGeoJSON` 직렬화 + Node `JSON.parse` 467회 왕복 발생. 응답 헤더에 `Cache-Control: public, max-age=86400` 박혀있으나 `dynamic = 'force-dynamic'`이라 Vercel CDN edge cache 동작 확인 필요.
+
+**가설별 진단·개선 후보**:
+
+- [ ] **A. Vercel CDN edge cache 적용** — `dynamic = 'force-dynamic'` 제거 + `dynamic = 'force-static'` 또는 `revalidate = 86400`로 전환. ETL이 폴리곤 안 건드리니 사실상 정적. 첫 호출만 DB, 이후 모두 CDN edge. 가장 큰 win.
+  - 검증: 응답 헤더의 `cf-cache-status` / `x-vercel-cache` 확인 — 현재 `MISS` 박혀있으면 force-dynamic이 캐시 무력화 중
+- [ ] **B. `ST_AsGeoJSON` precision 축소** — default 6 decimal places (≈11cm). zoom 11 시각화엔 precision 5(≈1.1m) 또는 4(≈11m)로 충분. `ST_AsGeoJSON(geom, 5)`로 응답 크기 ~30~40% 감소 기대.
+- [ ] **C. `ST_SimplifyPreserveTopology` 적용** — Douglas-Peucker로 좌표 점 수 자체 축소. tolerance 5m(≈0.00005°)면 zoom 11 시각엔 차이 안 보이고 페이로드 추가 축소.
+- [ ] **D. `JSON.parse` 왕복 제거** — `ST_AsGeoJSON(geom)::jsonb` 또는 pg `to_json`/`json_build_object` row aggregation으로 직접 JSON 객체 받기. Node.js `JSON.parse(467회)` CPU 비용 절감. dominant 아닐 수 있어 측정 후 결정.
+- [ ] **E. Server-Timing 헤더** — affordable처럼 `db / serialize / parse` 시간 분리해 정량 진단. 어디가 dominant인지 측정 후 A·B·C·D 우선순위 결정.
+- [ ] **F. Build-time 정적 파일 프리렌더** — V-World 갱신(분기 단위)에만 변경. `public/polygons.json` 빌드 시 생성 → 클라가 정적 파일 직접 fetch. DB 의존 제거 + CDN 자동 캐시. 단점: 폴리곤 갱신 시 재빌드 필요. A로 안 풀리면 비상 카드.
+- [ ] **G. Brotli precompress + Content-Encoding 검증** — Vercel은 자동 brotli 압축. 1342kB 응답이 wire에서 어느 정도까지 압축되는지 `content-length` 확인. 압축 잘 되면 wire 비용은 작고 dominant은 서버 처리 → A·E 우선.
+
+**우선순위 추천**:
+1. E (Server-Timing) — 5분 작업, 측정 후 dominant 판정
+2. A (CDN cache) — `force-static` 한 줄 변경, 가장 큰 win
+3. B + C (precision/simplify) — 페이로드 축소, 모바일 첫 로딩 체감
+4. D — A로 해결되면 후순위
+5. F — 비상 카드
+
+**트리거**: Mr. Song이 화면 Network 탭에서 polygons 응답 1342kB·~2s 소요 인지(2026-05-09). affordable PR #16 merge 후 별도 PR로 진행.
+
 ---
 
 ## Phase 0 — 데이터 검증 (2026-05-04 완료 ✓)
