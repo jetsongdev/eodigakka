@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - SidePanel 최근 거래 — 탭 → 매·전 동시 섹션
+## [v0.8.0] - 2026-05-09 - SidePanel 최근 거래 — 탭 → 매·전 동시 섹션
 
 탭 토글로 한 번에 한 종류만 보던 "최근 거래" 영역을 매매·전세 두 섹션으로 분리해 동시 노출. 모드 전환 클릭 없이 두 흐름을 한 화면에서 비교 가능. 헤더 mode는 `/api/affordable`·TOP5·분포 차트 primary에서 계속 단일 source of truth.
 
