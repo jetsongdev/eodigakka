@@ -1442,6 +1442,7 @@ function SidePanel({
         trades={details?.recent_trades}
         jeonse={details?.recent_jeonse}
         loading={loading}
+        mode={mode}
       />
 
       {details && (
@@ -1679,86 +1680,115 @@ function RecentTxSections({
   trades,
   jeonse,
   loading,
+  mode,
 }: {
   trades: RecentTransaction[] | undefined;
   jeonse: RecentTransaction[] | undefined;
   loading: boolean;
+  mode: QueryMode;
 }) {
-  const sections = [
-    { label: '매매 최근 10건', rows: trades ?? [], accent: MODE_ACCENT.trade },
-    { label: '전세 최근 10건', rows: jeonse ?? [], accent: MODE_ACCENT.jeonse },
-  ];
+  const tradeSection = { label: '매매', title: '매매 최근 10건', rows: trades ?? [], accent: MODE_ACCENT.trade };
+  const jeonseSection = { label: '전세', title: '전세 최근 10건', rows: jeonse ?? [], accent: MODE_ACCENT.jeonse };
+  const primary = mode === 'trade' ? tradeSection : jeonseSection;
+  const secondary = mode === 'trade' ? jeonseSection : tradeSection;
+
+  const renderSectionHeading = (section: typeof tradeSection) => (
+    <h4
+      style={{
+        marginTop: 0,
+        marginBottom: 6,
+        fontSize: 13,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 999,
+          background: section.accent,
+          display: 'inline-block',
+        }}
+      />
+      <span>{section.title}</span>
+      {!loading && (
+        <span style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>
+          {section.rows.length}건
+        </span>
+      )}
+    </h4>
+  );
+
+  const renderSectionBody = (rows: RecentTransaction[]) => (
+    <div
+      style={{
+        background: 'rgba(255,255,255,0.55)',
+        padding: '8px 10px',
+        borderRadius: 6,
+      }}
+    >
+      {loading ? (
+        <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>
+      ) : rows.length === 0 ? (
+        <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
+              <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((tx, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                <td style={{ padding: '4px 2px' }}>
+                  {tx.complex_name}
+                  <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                </td>
+                <td style={{ padding: '4px 2px', textAlign: 'right' }}>
+                  {(tx.amount_man / 10000).toFixed(1)}억
+                </td>
+                <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
 
   return (
     <div style={{ marginTop: 14 }}>
-      {sections.map((section, sectionIndex) => (
-        <section key={section.label} style={{ marginTop: sectionIndex === 0 ? 0 : 12 }}>
-          <h4
-            style={{
-              marginTop: 0,
-              marginBottom: 6,
-              fontSize: 13,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span
-              aria-hidden="true"
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                background: section.accent,
-                display: 'inline-block',
-              }}
-            />
-            <span>{section.label}</span>
-            {!loading && (
-              <span style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>
-                {section.rows?.length ?? 0}건
-              </span>
-            )}
-          </h4>
-          <div
-            style={{
-              background: 'rgba(255,255,255,0.55)',
-              padding: '8px 10px',
-              borderRadius: 6,
-            }}
-          >
-            {loading ? (
-              <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>
-            ) : section.rows.length === 0 ? (
-              <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
-                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-                    <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {section.rows.map((tx, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                      <td style={{ padding: '4px 2px' }}>
-                        {tx.complex_name}
-                        <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                      </td>
-                      <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                        {(tx.amount_man / 10000).toFixed(1)}억
-                      </td>
-                      <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-      ))}
+      <style>{`.recent-tx-secondary>summary::-webkit-details-marker{display:none}.recent-tx-secondary[open] .recent-tx-collapsed{display:none}.recent-tx-secondary:not([open]) .recent-tx-expanded{display:none}`}</style>
+      <section>
+        {renderSectionHeading(primary)}
+        {renderSectionBody(primary.rows)}
+      </section>
+      <details key={mode} className="recent-tx-secondary" style={{ marginTop: 12 }}>
+        <summary
+          style={{
+            listStyle: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+            fontWeight: 600,
+            marginBottom: 6,
+          }}
+        >
+          <span aria-hidden="true" className="recent-tx-collapsed">▸</span>
+          <span aria-hidden="true" className="recent-tx-expanded">▾</span>
+          <span>다른 모드 거래 보기 — {secondary.label} {secondary.rows.length}건</span>
+        </summary>
+        {renderSectionHeading(secondary)}
+        {renderSectionBody(secondary.rows)}
+      </details>
     </div>
   );
 }
