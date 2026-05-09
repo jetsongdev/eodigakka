@@ -19,3 +19,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 09 | [모바일 zoom 좌하단 + 선택된 동 폴리곤 강조 (PR #12)](09-zoom-and-selected-affordance/) | 2026-05-07 | ff60ff2 | 1 (mobile UX + selected affordance) |
 | 10 | [fitBounds 시트 가림 bug evidence (iPad Mini + PC)](10-fitbounds-bug-ipad-mini/) | 2026-05-07 | 6718594 | 1 (bug evidence) |
 | 11 | [fitBounds padding 보정 + selected 강조 회귀 fix](11-fitbounds-fix/) | 2026-05-07 | 1997957 | 1 (bug fix) |
+| 12 | [Mapbox zoom 버튼 30×30 → 44×44 (touch target)](12-zoom-44px/) | 2026-05-09 | 5c38bd1 | 1 (touch UX) |
