@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - /api/affordable 두 쿼리 Promise.all 병렬화 + Server-Timing 헤더
+## [v0.7.3] - 2026-05-09 - /api/affordable 두 쿼리 Promise.all 병렬화 + Server-Timing 헤더
 
 ### 변경
 - `web/app/api/affordable/route.ts` — `mv_dong_stats` JOIN 메인 쿼리와 `MAX(contract_date)` freshness 쿼리를 sequential `await` 두 번에서 `Promise.all` 병렬 실행으로 전환. 두 쿼리는 서로 독립이라 응답 시간이 max로 떨어지고 RTT 1번 절감. Neon 콜드 스타트 영향이 큰 첫 호출에서 가장 의미 있는 win 기대(tasks.md H 섹션 우선순위 1순위). 응답 형식·필드 동일
