@@ -10,10 +10,10 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (Mapbox 토큰 + Healthchecks ping 완료 직후)**:
-1. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
-2. ⚪ **GitHub 시크릿 ↔ Vercel env 일관성 점검** (F 섹션) — Neon 비번 회전 시 동기화 함정 미리 방지
-3. 🔵 **모바일 UX 잔여** (A 섹션) — SidePanel bottom sheet, 범례 floating chip, 햅틱
+**현재 우선순위 추천 (cron stale alert 도입 직후)**:
+1. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — 매·전 분리는 v0.7.0에서 완료, 다음 칸은 10건 이후 페이지네이션 (`txCursor` 또는 `txOffset`)
+2. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+3. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -27,8 +27,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
 - [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
 - [x] Healthchecks.io ping (2026-05-05) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 (값 없으면 스킵하고 빌드 계속). secret 등록 후 다음 cron firing(2026-05-06 03:00 KST)부터 즉시 효력.
-- [ ] cron firing 지연 알림 — `last_succeeded_at`가 KST 03:00 + 1h 지나도 갱신 안 되면 GH issue 자동 생성
-- [ ] 트리거: 다음 cron firing(2026-05-06 03:00 KST) 통과 + 1주일 안정 운영 확인 후
+- [x] **cron firing 지연 알림** (2026-05-09) — `.github/workflows/etl-stale-alert.yml` 추가. KST 05:00 (`0 20 * * *` UTC, ETL firing 03:00 + 2h GHA scheduler 지연 쿠션) 발사. `psql`로 `etl_job_status.last_succeeded_at`이 `NOW() - INTERVAL '25 hours'`보다 오래되면 stale 판정. dedup: 같은 label `etl-stale` open 이슈 있으면 skip. `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 수동 검증. label 사전 생성(`gh label create --force`) + `permissions: { issues: write }`. Healthchecks ping이 못 잡는 silent success(ETL exit 0이지만 `update_etl_status` 미도달) 보강.
 
 ### C. 블로그 콘텐츠 (단편 4 + 시리즈 1)
 
@@ -287,7 +286,7 @@ ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시�
 
 - [ ] **Neon free plan 0.5GB 한도 모니터링** — `pg_database_size('neondb')` 주간 query. 80% (≈400MB) 도달 시 alert + plan 업그레이드 또는 raw 테이블 TTL 검토. 현재 dump 7MB라 여유 큼이지만 서울 25구·12개월 누적 시 빨리 차오를 수 있음
 - [x] **Healthchecks.io ping** (2026-05-05 완료) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴. 새벽 03:00에 안 돌면 healthchecks.io에서 이메일/Telegram 알림. 무료 tier.
-- [ ] **cron firing 지연 알림** — GHA scheduler가 부하로 1~2시간 늦어질 수 있음. `last_succeeded_at`가 예상 firing 후 +1h 지나도 갱신 안 되면 GH issue 자동 생성하는 별도 cron 작성
+- [x] **cron firing 지연 알림** (2026-05-09) — `.github/workflows/etl-stale-alert.yml`. KST 05:00 발사 + 25h interval stale 판정 + label `etl-stale` dedup + `force_alert` workflow_dispatch input. 상세는 「A. UX 마무리」 위 B 섹션 항목 참조.
 - [ ] **/api/health 외부 ping** — Uptime Kuma 셀프호스트 또는 Healthchecks.io의 HTTP check로 5분마다 ping
 - [ ] (확장 시) **Grafana Cloud 무료 tier** — agent로 logs 송신, ETL 트렌드 시계열 시각화
 - [ ] (서비스화 단계) **Grafana + Loki 셀프호스트** — 풀 컨트롤, RAM ~1GB
