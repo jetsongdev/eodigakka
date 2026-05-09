@@ -1,40 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
+import dynamic from 'next/dynamic';
 import * as Slider from '@radix-ui/react-slider';
 
-import type { DongColor, QueryMode, SizeBucket } from '../lib/filter';
+import type { AffordableDongResponse, HoverInfo } from '../components/MapView';
+import type { QueryMode, SizeBucket } from '../lib/filter';
 
-const SEOUL_CENTER: [number, number] = [126.978, 37.5665];
-const DEFAULT_ZOOM = 11;
-
-const POLYGONS_SOURCE_ID = 'bjd-polygons';
-const POLYGONS_FILL_LAYER = 'bjd-polygons-fill';
-const POLYGONS_LINE_LAYER = 'bjd-polygons-line';
-
-const COLOR_MAP: Record<DongColor, string> = {
-  deep_green: '#2d8a4f',
-  light_green: '#7ab582',
-  deep_green_low: '#5fa86f',
-  yellow: '#e8b73a',
-  red: '#d04545',
-  grey: '#cccccc',
-};
-
-interface AffordableDongResponse {
-  bjd_code: string;
-  bjd_name: string;
-  median_man: number;
-  tx_count_3m: number;
-  unique_complex_3m: number;
-  confidence: 'high' | 'low' | 'insufficient';
-  jeonse_ratio: number | null;
-  color: DongColor;
-  evidence: string;
-  median_build_year: number | null;
-  build_year_stddev: number | null;
-}
+const MapView = dynamic(() => import('../components/MapView'), {
+  ssr: false,
+  loading: () => null,
+});
 
 interface AffordableResponse {
   dongs: AffordableDongResponse[];
@@ -81,13 +57,6 @@ interface DongDetailsResponse {
   evidence: string;
 }
 
-interface HoverInfo {
-  bjdCode: string;
-  bjdName: string;
-  x: number;
-  y: number;
-}
-
 type SizeOption = SizeBucket | 'all';
 
 interface AffordableQueryState {
@@ -120,35 +89,6 @@ function formatMan(man: number): string {
   return `${eok.toFixed(1)}억`;
 }
 
-// 폴리곤 geometry에서 [[minLng, minLat], [maxLng, maxLat]] 계산. Polygon/MultiPolygon 지원.
-// querySourceFeatures는 viewport 안만 반환해서 전 영역 커버 못함 — 캐시한 GeoJSON에서 직접 계산.
-function computePolygonBbox(
-  geom: GeoJSON.Geometry,
-): [[number, number], [number, number]] | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  const visit = (coord: number[]) => {
-    if (coord[0] < minX) minX = coord[0];
-    if (coord[0] > maxX) maxX = coord[0];
-    if (coord[1] < minY) minY = coord[1];
-    if (coord[1] > maxY) maxY = coord[1];
-  };
-  if (geom.type === 'Polygon') {
-    for (const ring of geom.coordinates) for (const c of ring) visit(c);
-  } else if (geom.type === 'MultiPolygon') {
-    for (const poly of geom.coordinates) for (const ring of poly) for (const c of ring) visit(c);
-  } else {
-    return null;
-  }
-  if (!Number.isFinite(minX)) return null;
-  return [
-    [minX, minY],
-    [maxX, maxY],
-  ];
-}
-
 function useIsHoverCapable() {
   // SSR 시에는 true로 시작 — 데스크톱 가정. 마운트 후 matchMedia로 보정.
   const [capable, setCapable] = useState(true);
@@ -178,35 +118,27 @@ function useIsNarrow() {
 }
 
 export default function MapPage() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<mapboxgl.Map | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [polygonCount, setPolygonCount] = useState<number | null>(null);
   const [affordable, setAffordable] = useState<AffordableResponse | null>(null);
   // mode×size별 전체 동 캐시 — cash 필터는 client에서 적용해 슬라이더 latency 0
   const [allDongs, setAllDongs] = useState<AffordableDongResponse[]>([]);
+  const [matched, setMatched] = useState<AffordableDongResponse[]>([]);
   const [dataFreshness, setDataFreshness] = useState<string>('');
   const [query, setQuery] = useState<AffordableQueryState>(DEFAULT_QUERY);
   const [loading, setLoading] = useState(false);
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [selectedBjd, setSelectedBjd] = useState<string | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
   // 터치 디바이스(`hover: none`)에서는 mouseleave가 발사되지 않아 tooltip이 영구 잔류
   const isHoverCapable = useIsHoverCapable();
   // SidePanel이 bottom sheet인지 side panel인지 — fitBounds padding 분기에 사용
   const isNarrow = useIsNarrow();
-  const navControlRef = useRef<mapboxgl.NavigationControl | null>(null);
-  // 폴리곤 GeoJSON 캐시 — 선택된 동 bbox 계산에 사용 (querySourceFeatures는 viewport 안만 반환해서 신뢰 불가)
-  const polygonsGeoJsonRef = useRef<GeoJSON.FeatureCollection | null>(null);
-  // 동 선택 직전 카메라 — 시트 닫을 때 복귀
-  const originalCameraRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
   // 다음 cash 변경 또는 mode/size 변경 시까지 유지(자동 fade-out 없음)
   const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
   const prevMatchedRef = useRef<Set<string>>(new Set());
-  const prevSelectedBjdRef = useRef<string | null>(null);
   const lastFilterCtxRef = useRef<{ mode: QueryMode; size: SizeOption } | null>(null);
 
   // affordable 응답을 bjd_code로 빠르게 조회하기 위한 ref
@@ -214,246 +146,6 @@ export default function MapPage() {
   affordableMapRef.current = new Map(
     (affordable?.dongs ?? []).map((d) => [d.bjd_code, d]),
   );
-
-  // 1) 지도 + 폴리곤 source/layer 1회 초기화
-  useEffect(() => {
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    if (!token) {
-      setError('NEXT_PUBLIC_MAPBOX_TOKEN 미설정 — web/.env.local 확인');
-      return;
-    }
-    if (!containerRef.current || mapRef.current) return;
-
-    // WebGL 사전 체크 — 컨텍스트 생성 자체가 실패하면 mapbox `new Map()`이 throw한다.
-    // StrictMode + HMR로 누수가 쌓이거나 GPU 가속이 차단된 환경을 즉시 식별.
-    const probeCanvas = document.createElement('canvas');
-    const probeGl =
-      probeCanvas.getContext('webgl2') ||
-      probeCanvas.getContext('webgl') ||
-      probeCanvas.getContext('experimental-webgl');
-    if (!probeGl) {
-      setError(
-        'WebGL 초기화 실패 — 브라우저가 WebGL 컨텍스트를 거부했습니다.\n\n' +
-          '점검 순서:\n' +
-          '(1) chrome://settings/system → "그래픽 가속 사용" ON → Chrome 재시작\n' +
-          '(2) chrome://gpu → "WebGL: Hardware accelerated" 확인\n' +
-          '(3) chrome://flags/#ignore-gpu-blocklist Enabled, #use-angle = Metal\n' +
-          '(4) 또는 Safari/Firefox에서 열어보세요.\n\n' +
-          '많은 탭이 누적된 dev 세션이면 Chrome 완전 종료 후 재기동이 즉시 회복법.',
-      );
-      return;
-    }
-
-    mapboxgl.accessToken = token;
-
-    let map: mapboxgl.Map;
-    try {
-      map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: 'mapbox://styles/mapbox/light-v11',
-        center: SEOUL_CENTER,
-        zoom: DEFAULT_ZOOM,
-        minZoom: 9,
-        maxZoom: 16,
-        // 성능 caveat 시에도 컨텍스트 생성 — Apple Silicon 일부 환경에서 보호
-        failIfMajorPerformanceCaveat: false,
-      });
-    } catch (err) {
-      setError(
-        `Mapbox 초기화 실패: ${err instanceof Error ? err.message : String(err)} — 브라우저 재시작 후 다시 시도해 주세요.`,
-      );
-      return;
-    }
-    mapRef.current = map;
-
-    // mapbox 내부에서 WebGL 컨텍스트 손실 시 onError 발생 — 명시적으로 처리
-    map.on('error', (e) => {
-      const msg = e?.error?.message ?? 'mapbox 알 수 없는 오류';
-      if (msg.toLowerCase().includes('webgl')) {
-        setError(`WebGL 컨텍스트 손실: ${msg} — 새로고침해 주세요.`);
-      }
-    });
-
-    // NavigationControl은 isNarrow 의존 별도 useEffect에서 add — 모바일 좌하단/데스크톱 우상단
-
-    map.on('load', async () => {
-      try {
-        const res = await fetch('/api/polygons');
-        if (!res.ok) throw new Error(`/api/polygons HTTP ${res.status}`);
-        const fc = (await res.json()) as GeoJSON.FeatureCollection;
-        polygonsGeoJsonRef.current = fc;
-
-        map.addSource(POLYGONS_SOURCE_ID, {
-          type: 'geojson',
-          data: fc,
-          promoteId: 'bjd_code',
-        });
-
-        map.addLayer({
-          id: POLYGONS_FILL_LAYER,
-          type: 'fill',
-          source: POLYGONS_SOURCE_ID,
-          paint: {
-            'fill-color': [
-              'match',
-              ['feature-state', 'color'],
-              'deep_green', COLOR_MAP.deep_green,
-              'light_green', COLOR_MAP.light_green,
-              'deep_green_low', COLOR_MAP.deep_green_low,
-              'yellow', COLOR_MAP.yellow,
-              'red', COLOR_MAP.red,
-              'grey', COLOR_MAP.grey,
-              COLOR_MAP.grey,
-            ],
-            'fill-opacity': [
-              'case',
-              ['==', ['feature-state', 'selected'], true], 0.85,
-              ['==', ['feature-state', 'color'], 'deep_green_low'], 0.5,
-              ['==', ['feature-state', 'matched'], true], 0.7,
-              0.18,
-            ],
-          },
-        });
-
-        map.addLayer({
-          id: POLYGONS_LINE_LAYER,
-          type: 'line',
-          source: POLYGONS_SOURCE_ID,
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['feature-state', 'selected'], true], '#0066ff',
-              '#666',
-            ],
-            'line-width': [
-              'case',
-              ['==', ['feature-state', 'selected'], true], 3,
-              0.4,
-            ],
-          },
-        });
-
-        // hover: 커서 + tooltip
-        map.on('mousemove', POLYGONS_FILL_LAYER, (e) => {
-          if (!e.features?.length) return;
-          map.getCanvas().style.cursor = 'pointer';
-          const feat = e.features[0];
-          const props = feat.properties as { bjd_code?: string; bjd_name?: string } | null;
-          if (!props?.bjd_code) return;
-          setHover({
-            bjdCode: props.bjd_code,
-            bjdName: props.bjd_name ?? '',
-            x: e.point.x,
-            y: e.point.y,
-          });
-        });
-        map.on('mouseleave', POLYGONS_FILL_LAYER, () => {
-          map.getCanvas().style.cursor = '';
-          setHover(null);
-        });
-
-        // click: 사이드패널 열기
-        map.on('click', POLYGONS_FILL_LAYER, (e) => {
-          if (!e.features?.length) return;
-          const feat = e.features[0];
-          const props = feat.properties as { bjd_code?: string } | null;
-          if (!props?.bjd_code) return;
-          setSelectedBjd(props.bjd_code);
-        });
-
-        setPolygonCount(fc.features?.length ?? 0);
-        setMapLoaded(true);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    });
-
-    return () => {
-      // StrictMode / HMR cleanup이 실패해도 ref를 비워야 다음 mount가 init을 진행한다.
-      try {
-        map.remove();
-      } catch {
-        // mapbox 내부 cleanup이 실패해도 useEffect cleanup은 throw하지 않는다
-      }
-      mapRef.current = null;
-      setMapLoaded(false);
-    };
-  }, []);
-
-  // NavigationControl 위치 — 터치 디바이스(모바일·iPad Mini 등) 좌하단 / 마우스(데스크톱) 우상단.
-  // 사이드패널/시트가 우측을 차지해 우상단 zoom이 가려지는 문제 회피 + 엄지 ergonomics.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-    const position: 'top-right' | 'bottom-left' = isHoverCapable ? 'top-right' : 'bottom-left';
-    if (navControlRef.current) {
-      map.removeControl(navControlRef.current);
-    }
-    const control = new mapboxgl.NavigationControl({ showCompass: false });
-    map.addControl(control, position);
-    navControlRef.current = control;
-  }, [isHoverCapable, mapLoaded]);
-
-  // 1-C) 선택된 동 polygon affordance — bjd_code promoteId 기반 feature-state 토글
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-    if (!map.getSource(POLYGONS_SOURCE_ID)) return;
-
-    if (prevSelectedBjdRef.current) {
-      map.setFeatureState(
-        { source: POLYGONS_SOURCE_ID, id: prevSelectedBjdRef.current },
-        { selected: false },
-      );
-    }
-    if (selectedBjd) {
-      map.setFeatureState(
-        { source: POLYGONS_SOURCE_ID, id: selectedBjd },
-        { selected: true },
-      );
-    }
-    prevSelectedBjdRef.current = selectedBjd;
-  }, [selectedBjd, mapLoaded]);
-
-  // 1-D) 선택 시 폴리곤으로 fitBounds, 닫을 때 원래 카메라로 복귀
-  // padding으로 시트 영역 회피 — 모바일은 하단(시트 max 80vh), 데스크톱은 우측(side panel ~420px)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapLoaded) return;
-
-    if (selectedBjd) {
-      // 첫 선택일 때만 카메라 저장 (연속 선택 시 원래 위치 유지)
-      if (!originalCameraRef.current) {
-        const c = map.getCenter();
-        originalCameraRef.current = { center: [c.lng, c.lat], zoom: map.getZoom() };
-      }
-      const fc = polygonsGeoJsonRef.current;
-      const feature = fc?.features.find((f) => f.properties?.bjd_code === selectedBjd);
-      const bbox = feature ? computePolygonBbox(feature.geometry) : null;
-      if (!bbox) return;
-
-      const container = map.getContainer();
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      let padding: { top: number; right: number; bottom: number; left: number };
-      if (isNarrow) {
-        // 모바일 — 시트 max 80vh 하단 점유
-        padding = { top: 80, right: 30, bottom: Math.floor(h * 0.78), left: 30 };
-      } else if (w <= 1024) {
-        // 좁은 데스크톱(iPad Mini portrait/landscape, iPad Pro 11 portrait)
-        padding = { top: 360, right: 440, bottom: 80, left: 80 };
-      } else {
-        // 표준 데스크톱
-        padding = { top: 80, right: 480, bottom: 80, left: 80 };
-      }
-
-      map.fitBounds(bbox, { padding, duration: 700, maxZoom: 14 });
-    } else if (originalCameraRef.current) {
-      const { center, zoom } = originalCameraRef.current;
-      map.flyTo({ center, zoom, duration: 700 });
-      originalCameraRef.current = null;
-    }
-  }, [selectedBjd, mapLoaded, isNarrow]);
 
   // 2-A) mode/size 변경 시에만 네트워크 호출 — cash 범위는 wide-open으로 받아서 클라에서 필터
   useEffect(() => {
@@ -488,15 +180,13 @@ export default function MapPage() {
     };
   }, [query.mode, query.size]);
 
-  // 2-B) cash 슬라이더 변경 시 클라 사이드 필터 + map feature-state 갱신
+  // 2-B) cash 슬라이더 변경 시 클라 사이드 필터
   // network roundtrip 없으므로 onValueChange 매 호출마다 즉시 반영
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
     const matched = allDongs.filter(
       (d) => d.median_man >= query.cashMin && d.median_man <= query.cashMax,
     );
+    setMatched(matched);
 
     // delta 계산 — mode/size 동일 컨텍스트일 때만 cash 변경에 의한 +/- 표시
     const newSet = new Set(matched.map((d) => d.bjd_code));
@@ -526,28 +216,6 @@ export default function MapPage() {
       data_freshness: dataFreshness,
       evidence: `${matched.length}개 동 통과 · ${modeLabel} · ${formatMan(query.cashMin)}~${formatMan(query.cashMax)}`,
     });
-
-    const tryApply = () => {
-      if (!map.getSource(POLYGONS_SOURCE_ID)) {
-        map.once('idle', tryApply);
-        return;
-      }
-      // 차분 적용 — prev에 있고 new에 없는 동의 color/matched만 해제. selected는
-      // 자연 보존(전체 wipe 회귀 대신). 슬라이더 drag 시 467개 wipe + N개 재투입을
-      // |added|+|removed|개 호출로 축소.
-      for (const code of prev) {
-        if (newSet.has(code)) continue;
-        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'color');
-        map.removeFeatureState({ source: POLYGONS_SOURCE_ID, id: code }, 'matched');
-      }
-      for (const dong of matched) {
-        map.setFeatureState(
-          { source: POLYGONS_SOURCE_ID, id: dong.bjd_code },
-          { color: dong.color, matched: true },
-        );
-      }
-    };
-    tryApply();
   }, [allDongs, query.cashMin, query.cashMax, query.mode, dataFreshness]);
 
   // 3) selectedBjd 변경 시 동 상세 fetch
@@ -580,7 +248,16 @@ export default function MapPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh' }}>
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+        <MapView
+          matched={matched}
+          selectedBjd={selectedBjd}
+          isHoverCapable={isHoverCapable}
+          isNarrow={isNarrow}
+          onHover={setHover}
+          onSelectBjd={setSelectedBjd}
+          onPolygonCount={setPolygonCount}
+          onError={setError}
+        />
 
         <ControlPanel
           query={query}
@@ -1765,12 +1442,12 @@ function RecentTxSections({
 
 function Legend() {
   const items: Array<{ color: string; label: string; opacity?: number }> = [
-    { color: COLOR_MAP.deep_green, label: '조건 통과 (high)' },
-    { color: COLOR_MAP.deep_green_low, label: 'low confidence', opacity: 0.5 },
-    { color: COLOR_MAP.light_green, label: 'IQR null' },
-    { color: COLOR_MAP.yellow, label: 'IQR 분산 가드' },
-    { color: COLOR_MAP.red, label: '전세가율 80%+' },
-    { color: COLOR_MAP.grey, label: '미통과/표본 부족' },
+    { color: '#2d8a4f', label: '조건 통과 (high)' },
+    { color: '#5fa86f', label: 'low confidence', opacity: 0.5 },
+    { color: '#7ab582', label: 'IQR null' },
+    { color: '#e8b73a', label: 'IQR 분산 가드' },
+    { color: '#d04545', label: '전세가율 80%+' },
+    { color: '#cccccc', label: '미통과/표본 부족' },
   ];
   return (
     <div style={{ marginTop: 8, display: 'grid', gap: 2, fontSize: 11 }}>

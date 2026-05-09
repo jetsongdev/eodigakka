@@ -1,12 +1,13 @@
 {
   "name": "eodigakka-web",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "analyze": "DATABASE_URL=postgres://dummy@localhost/dummy next experimental-analyze",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

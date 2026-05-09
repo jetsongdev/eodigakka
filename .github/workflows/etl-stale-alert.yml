@@ -1,0 +1,105 @@
+name: ETL stale alert
+
+on:
+  schedule:
+    # 매일 20:00 UTC = KST 05:00 (ETL 03:00 firing + 2h 쿠션, GHA scheduler 지연 흡수)
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      force_alert:
+        description: '강제로 alert 발사 (dedup·이슈 본문 검증용)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: etl-stale-alert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create etl-stale \
+            --color B60205 \
+            --description "ETL 데이터 신선도 경고" \
+            --force
+
+      - name: Check ETL freshness
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          row=$(psql "${DATABASE_URL}" -tAF '|' <<'SQL'
+          SELECT
+            COALESCE((SELECT last_succeeded_at::text FROM etl_job_status WHERE job_name = 'rtms_phase1'), ''),
+            to_char(NOW() AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS'),
+            (COALESCE(
+              (SELECT last_succeeded_at FROM etl_job_status WHERE job_name = 'rtms_phase1'),
+              '1970-01-01'::timestamptz
+            ) < NOW() - INTERVAL '25 hours')::text;
+          SQL
+          )
+          last="$(echo "$row" | cut -d'|' -f1)"
+          now_kst="$(echo "$row" | cut -d'|' -f2)"
+          stale="$(echo "$row" | cut -d'|' -f3)"
+          {
+            echo "last_succeeded_at=$last"
+            echo "now_kst=$now_kst"
+            echo "stale=$stale"
+          } >> "$GITHUB_OUTPUT"
+          echo "📊 last_succeeded_at='$last'  now_kst='$now_kst'  stale='$stale'"
+
+      - name: Create alert issue (stale or force)
+        if: ${{ steps.check.outputs.stale == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_alert) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LAST_OK: ${{ steps.check.outputs.last_succeeded_at }}
+          NOW_KST: ${{ steps.check.outputs.now_kst }}
+          IS_FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_alert }}
+        run: |
+          existing=$(gh issue list --label etl-stale --state open --json number --jq 'length')
+          if [ "${existing}" -gt 0 ]; then
+            echo "이미 open etl-stale 이슈 ${existing}개 — 생성 skip (dedup)"
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          {
+            echo "## 현상"
+            echo
+            echo "\`etl_job_status.last_succeeded_at\`이 25h 이상 갱신되지 않았습니다."
+            echo
+            echo "- 마지막 성공: \`${LAST_OK:-(없음)}\`"
+            echo "- 점검 시각 (KST): \`${NOW_KST}\`"
+            echo
+            echo "## 의미"
+            echo
+            echo "이 워크플로는 GHA scheduler 지연 또는 silent success(ETL이 exit 0이지만 \`update_etl_status\`가 안 도달한 케이스)를 잡는 안전망입니다. Healthchecks.io ping은 ETL 실행 실패는 잡지만 데이터 신선도 자체는 보지 않습니다."
+            echo
+            echo "## 점검 체크리스트"
+            echo
+            echo "- [ ] [Actions / RTMS ETL (daily)](../../actions/workflows/etl.yml) 최근 run 확인"
+            echo "- [ ] \`/api/health\` 응답에서 \`last_succeeded_at\` 직접 확인"
+            echo "- [ ] Neon 콘솔에서 \`etl_job_status\` 행 직접 조회"
+            echo "- [ ] 정상화 후 본 이슈 close (다음 stale 발생 시 자동 재생성됨)"
+            if [ "${IS_FORCE}" = "true" ]; then
+              echo
+              echo "> ⚠️ \`workflow_dispatch force_alert=true\`로 발사된 검증용 이슈입니다."
+            fi
+          } > "$body_file"
+
+          gh issue create \
+            --label etl-stale \
+            --title "[ETL] 데이터 신선도 경고 — ${NOW_KST} (KST)" \
+            --body-file "$body_file"

@@ -536,6 +536,16 @@ jeonse-buyable-map/
   - `.github/workflows/etl.yml` start/success/fail 3-step 추가 (env hoist로 GHA shell injection 방어 — `gha-shell-injection.md` TIL).
   - 향후 `/api/health` 외부 ping(HTTP check), 다른 cron(Vercel deployment 모니터링 등)도 같은 패턴으로 확장 가능.
 
+### ADR-011: ETL 데이터 신선도 in-DB watchdog 추가 (2026-05-09)
+- **결정**: ADR-010 외부 watchdog와 별개로, GHA 자체 워크플로 `.github/workflows/etl-stale-alert.yml`로 DB 측 신선도(`etl_job_status.last_succeeded_at`)를 25시간 interval 기준으로 일별 점검. stale 또는 NULL이면 label `etl-stale` 단일 open 이슈로 fan-out, dedup으로 outage N일 동안 같은 이슈에 모임. 정상화 후 issue close가 ack 신호이며 다음 stale에 자동 재생성.
+- **근거**: Healthchecks ping은 ETL **실행 실패**(workflow step `failure()`)는 잡지만 silent success — ETL이 exit 0인데 `update_etl_status(succeeded=True)` 호출까지 도달 못한 케이스 — 또는 GHA scheduler 자체가 1~2시간 firing 지연된 케이스를 정상으로 본다. ADR-010 trade-off의 "가짜 success가 진짜 실패를 가릴 위험"을 데이터 freshness 자체를 DB에서 보는 방식으로 메운다. 두 layer(외부 ping + in-DB watchdog)가 서로 독립이라 single point of failure 회피.
+- **trade-off**: 같은 outage에 두 채널(Healthchecks 이메일·Telegram + GH issue)로 알림이 동시에 와 중복 인지 비용 발생 가능. 다만 GH issue는 trail이 남고 close가 자연 ack라 운영 기록으로도 가치 있음. cron 시점 KST 05:00은 ETL firing(KST 03:00) + 2h 쿠션이라 GHA scheduler·ETL 자체 지연 둘 다 흡수.
+- **영향**:
+  - `.github/workflows/etl-stale-alert.yml` 신규: cron `0 20 * * *` UTC (KST 05:00) + `workflow_dispatch` `force_alert: bool` 검증 입력 + permissions `issues: write` / `contents: read` + label `gh label create --color B60205 --force` idempotent 보장.
+  - stale 판정: `COALESCE(last_succeeded_at, '1970-01-01'::timestamptz) < NOW() - INTERVAL '25 hours'` (절대 clock math 회피, NULL 안전).
+  - dedup: 본 워크플로 첫 step에서 `gh issue list --label etl-stale --state open --json number --jq 'length'` 0이 아니면 alert 생성 skip.
+  - 검증 path: PR 머지 후 main에서 `gh workflow run etl-stale-alert.yml --field force_alert=true` 1회 → 이슈 1건 생성, 재실행 → dedup으로 skip, 이슈 close 후 다시 force → 신규 이슈 생성으로 재생성 path 검증.
+
 ### ADR-008: bjd_polygon 법정동 체계로 마이그레이션 (2026-05-04 결정 / 2026-05-05 실행)
 - **결정**: `bjd_polygon`을 HangJeongDong GeoJSON(행정동) 기준에서 V-World `LSMD_ADM_SECT_UMD_11`(서울 법정 읍면동 경계 SHP, EPSG:5186→4326 변환) 기준으로 재적재.
 - **근거**: RTMS API는 법정동 코드만 제공(`법정동시군구코드+법정동읍면동코드` → `1138010300` 패턴). HangJeongDong은 행정동 코드(`adm_cd2 = 1138051000`)라 JOIN 0건. JEONSE는 동 이름 fallback이 우연히 행정동에 매핑되지만 1법정동=다행정동 케이스(예: 불광동→불광1동/2동)에서 데이터 손실·임의 매핑 발생. 부동산 도메인 표준은 법정동.
