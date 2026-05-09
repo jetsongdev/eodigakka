@@ -1477,8 +1477,8 @@ function DistributionChart({
   const trade = pickFor('TRADE');
   const jeonse = pickFor('JEONSE');
   const series: Array<{ label: string; color: string; row: DongDistribution; primary: boolean }> = [];
-  if (trade) series.push({ label: '매매', color: '#2d8a4f', row: trade, primary: mode === 'trade' });
-  if (jeonse) series.push({ label: '전세', color: '#5577c8', row: jeonse, primary: mode === 'jeonse' });
+  if (trade) series.push({ label: '매매', color: MODE_ACCENT.trade, row: trade, primary: mode === 'trade' });
+  if (jeonse) series.push({ label: '전세', color: MODE_ACCENT.jeonse, row: jeonse, primary: mode === 'jeonse' });
 
   if (series.length === 0) return null;
 
@@ -1670,6 +1670,11 @@ function EvidenceCard({
   );
 }
 
+const MODE_ACCENT: Record<QueryMode, string> = {
+  trade: '#2d8a4f',
+  jeonse: '#5577c8',
+};
+
 function RecentTxSections({
   trades,
   jeonse,
@@ -1680,8 +1685,8 @@ function RecentTxSections({
   loading: boolean;
 }) {
   const sections = [
-    { label: '매매 최근 10건', rows: trades, accent: '#2d8a4f' },
-    { label: '전세 최근 10건', rows: jeonse, accent: '#5577c8' },
+    { label: '매매 최근 10건', rows: trades ?? [], accent: MODE_ACCENT.trade },
+    { label: '전세 최근 10건', rows: jeonse ?? [], accent: MODE_ACCENT.jeonse },
   ];
 
   return (
@@ -1722,11 +1727,11 @@ function RecentTxSections({
               borderRadius: 6,
             }}
           >
-            {loading && <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>}
-            {!loading && (!section.rows || section.rows.length === 0) && (
+            {loading ? (
+              <div style={{ color: '#888', fontSize: 12 }}>로드 중...</div>
+            ) : section.rows.length === 0 ? (
               <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
-            )}
-            {!loading && section.rows && section.rows.length > 0 && (
+            ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
