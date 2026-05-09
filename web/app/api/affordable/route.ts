@@ -33,31 +33,37 @@ export async function GET(request: NextRequest) {
     const query = parseAffordableQuery(request.nextUrl.searchParams);
     const statsMode = toStatsMode(query.mode);
 
-    const rows = await sql<AffordableRow>`
-      SELECT
-        s.bjd_code,
-        p.bjd_name,
-        s.size_bucket,
-        s.mode,
-        s.tx_count_3m,
-        s.unique_complex_3m,
-        CAST(s.median_man AS DOUBLE PRECISION) AS median_man,
-        CAST(s.p25_man AS DOUBLE PRECISION) AS p25_man,
-        CAST(s.p75_man AS DOUBLE PRECISION) AS p75_man,
-        s.last_contract_date::text AS last_contract_date,
-        s.confidence,
-        CAST(jr.ratio AS DOUBLE PRECISION) AS jeonse_ratio,
-        CAST(s.median_build_year AS DOUBLE PRECISION) AS median_build_year,
-        CAST(s.build_year_stddev AS DOUBLE PRECISION) AS build_year_stddev
-      FROM mv_dong_stats s
-      JOIN bjd_polygon p ON p.bjd_code = s.bjd_code
-      LEFT JOIN mv_jeonse_ratio jr
-        ON jr.bjd_code = s.bjd_code
-       AND jr.size_bucket = s.size_bucket
-      WHERE s.mode = ${statsMode}
-        ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
-      ORDER BY s.median_man ASC, s.tx_count_3m DESC
-    `.execute(db);
+    const [rows, freshness] = await Promise.all([
+      sql<AffordableRow>`
+        SELECT
+          s.bjd_code,
+          p.bjd_name,
+          s.size_bucket,
+          s.mode,
+          s.tx_count_3m,
+          s.unique_complex_3m,
+          CAST(s.median_man AS DOUBLE PRECISION) AS median_man,
+          CAST(s.p25_man AS DOUBLE PRECISION) AS p25_man,
+          CAST(s.p75_man AS DOUBLE PRECISION) AS p75_man,
+          s.last_contract_date::text AS last_contract_date,
+          s.confidence,
+          CAST(jr.ratio AS DOUBLE PRECISION) AS jeonse_ratio,
+          CAST(s.median_build_year AS DOUBLE PRECISION) AS median_build_year,
+          CAST(s.build_year_stddev AS DOUBLE PRECISION) AS build_year_stddev
+        FROM mv_dong_stats s
+        JOIN bjd_polygon p ON p.bjd_code = s.bjd_code
+        LEFT JOIN mv_jeonse_ratio jr
+          ON jr.bjd_code = s.bjd_code
+         AND jr.size_bucket = s.size_bucket
+        WHERE s.mode = ${statsMode}
+          ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
+        ORDER BY s.median_man ASC, s.tx_count_3m DESC
+      `.execute(db),
+      sql<{ max_contract_date: string | null }>`
+        SELECT MAX(contract_date)::text AS max_contract_date
+        FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
+      `.execute(db),
+    ]);
 
     const dongs = rows.rows
       .map((row) =>
@@ -97,11 +103,6 @@ export async function GET(request: NextRequest) {
         median_build_year: dong.medianBuildYear,
         build_year_stddev: dong.buildYearStddev,
       }));
-
-    const freshness = await sql<{ max_contract_date: string | null }>`
-      SELECT MAX(contract_date)::text AS max_contract_date
-      FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
-    `.execute(db);
 
     const maxContractDate = freshness.rows[0]?.max_contract_date ?? null;
 
