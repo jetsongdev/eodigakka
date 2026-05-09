@@ -111,19 +111,21 @@ export async function GET(request: NextRequest) {
     const maxContractDate = freshness.rows[0]?.max_contract_date ?? null;
     const tEval = performance.now() - t0 - tDb;
 
-    const res = NextResponse.json({
-      dongs,
-      generated_at: new Date().toISOString(),
-      data_freshness: maxContractDate
-        ? `RTMS ${maxContractDate} 신고분까지`
-        : 'RTMS 신고분 없음',
-      evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
-    });
-    res.headers.set(
-      'Server-Timing',
-      `stats;dur=${tStats.toFixed(1)}, fresh;dur=${tFresh.toFixed(1)}, db;dur=${tDb.toFixed(1)}, eval;dur=${tEval.toFixed(1)}`,
+    return NextResponse.json(
+      {
+        dongs,
+        generated_at: new Date().toISOString(),
+        data_freshness: maxContractDate
+          ? `RTMS ${maxContractDate} 신고분까지`
+          : 'RTMS 신고분 없음',
+        evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
+      },
+      {
+        headers: {
+          'Server-Timing': `stats;dur=${tStats.toFixed(1)}, fresh;dur=${tFresh.toFixed(1)}, db;dur=${tDb.toFixed(1)}, eval;dur=${tEval.toFixed(1)}`,
+        },
+      },
     );
-    return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, evidence: '입력 검증 또는 조회 실패' }, { status: 400 });
