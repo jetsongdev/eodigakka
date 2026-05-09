@@ -10,10 +10,14 @@
 
 ---
 
-## [Unreleased] - /api/affordable 두 쿼리 Promise.all 병렬화
+## [Unreleased] - /api/affordable 두 쿼리 Promise.all 병렬화 + Server-Timing 헤더
 
 ### 변경
-- `web/app/api/affordable/route.ts` — `mv_dong_stats` JOIN 메인 쿼리와 `MAX(contract_date)` freshness 쿼리를 sequential `await` 두 번에서 `Promise.all` 병렬 실행으로 전환. 두 쿼리는 서로 독립이라 응답 시간이 max로 떨어지고 RTT 1번 절감. Neon 콜드 스타트 영향이 큰 첫 호출에서 가장 의미 있는 win 기대(tasks.md H 섹션 우선순위 1순위). 응답 형식·필드 동일, e2e api.spec.ts 6/6 그대로 통과
+- `web/app/api/affordable/route.ts` — `mv_dong_stats` JOIN 메인 쿼리와 `MAX(contract_date)` freshness 쿼리를 sequential `await` 두 번에서 `Promise.all` 병렬 실행으로 전환. 두 쿼리는 서로 독립이라 응답 시간이 max로 떨어지고 RTT 1번 절감. Neon 콜드 스타트 영향이 큰 첫 호출에서 가장 의미 있는 win 기대(tasks.md H 섹션 우선순위 1순위). 응답 형식·필드 동일
+
+### 추가
+- `Server-Timing` 응답 헤더 4개 metric 노출 — `stats;dur=<ms>` (메인 쿼리), `fresh;dur=<ms>` (freshness 쿼리), `db;dur=<ms>` (Promise.all wall-clock), `eval;dur=<ms>` (map/filter 처리). DevTools Network → Timing 탭에서 자동 시각화. 로컬 dev에서 `stats=65.7, fresh=49.2, db=65.8(=max), eval=0.1` 확인 — 병렬화 작동 입증(sequential이었으면 db≈115). 앞으로 latency 회귀 베이스라인 + Production 콜드 스타트 진단(가설 A) 도구로 영구 사용
+- `tests/e2e/api.spec.ts` — `Server-Timing` 헤더 존재 회귀 가드 1줄 (`/stats;dur=\d.*db;dur=\d/`)
 
 ## [v0.7.0] - 2026-05-07 - 선택된 폴리곤 시각 강조 + zoom-to-fit
 

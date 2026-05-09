@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
     const query = parseAffordableQuery(request.nextUrl.searchParams);
     const statsMode = toStatsMode(query.mode);
 
+    const t0 = performance.now();
+    let tStats = 0;
+    let tFresh = 0;
     const [rows, freshness] = await Promise.all([
       sql<AffordableRow>`
         SELECT
@@ -58,12 +61,13 @@ export async function GET(request: NextRequest) {
         WHERE s.mode = ${statsMode}
           ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
         ORDER BY s.median_man ASC, s.tx_count_3m DESC
-      `.execute(db),
+      `.execute(db).then((r) => { tStats = performance.now() - t0; return r; }),
       sql<{ max_contract_date: string | null }>`
         SELECT MAX(contract_date)::text AS max_contract_date
         FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
-      `.execute(db),
+      `.execute(db).then((r) => { tFresh = performance.now() - t0; return r; }),
     ]);
+    const tDb = performance.now() - t0;
 
     const dongs = rows.rows
       .map((row) =>
@@ -105,8 +109,9 @@ export async function GET(request: NextRequest) {
       }));
 
     const maxContractDate = freshness.rows[0]?.max_contract_date ?? null;
+    const tEval = performance.now() - t0 - tDb;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       dongs,
       generated_at: new Date().toISOString(),
       data_freshness: maxContractDate
@@ -114,6 +119,11 @@ export async function GET(request: NextRequest) {
         : 'RTMS 신고분 없음',
       evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
     });
+    res.headers.set(
+      'Server-Timing',
+      `stats;dur=${tStats.toFixed(1)}, fresh;dur=${tFresh.toFixed(1)}, db;dur=${tDb.toFixed(1)}, eval;dur=${tEval.toFixed(1)}`,
+    );
+    return res;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, evidence: '입력 검증 또는 조회 실패' }, { status: 400 });
