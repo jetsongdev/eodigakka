@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - chore(ops): ETL 데이터 신선도 알림 워크플로 추가
+## [v0.7.2] - 2026-05-09 - chore(ops): ETL 데이터 신선도 알림 워크플로 추가
 
 `.github/workflows/etl-stale-alert.yml` 신규. KST 05:00 (`0 20 * * *` UTC, ETL firing 03:00 + 2h GHA scheduler 지연 쿠션) 발사. `psql`로 `etl_job_status.last_succeeded_at`이 `NOW() - INTERVAL '25 hours'`보다 오래되거나 NULL이면 stale 판정 → label `etl-stale` 단일 open 이슈로 fan-out (dedup으로 outage N일 동안 같은 이슈에 모이고, close 시 다음 stale에 자동 재생성). `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 포맷을 stale 발생 전에 수동 검증. label은 워크플로 첫 step에서 `gh label create --force`로 idempotent하게 보장. Healthchecks.io ping이 못 잡는 silent success(ETL exit 0이지만 `update_etl_status` 미도달) 보강 — 데이터 freshness 자체를 DB 측에서 본다.
 
