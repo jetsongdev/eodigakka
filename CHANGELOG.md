@@ -10,6 +10,13 @@
 
 ---
 
+## [Unreleased] - mapbox-gl을 next/dynamic으로 분리해 초기 JS 청크 1.7MB 제거
+
+### 성능
+- mapbox-gl (1.7MB raw) 을 next/dynamic + ssr:false 로 분리, 초기 JS 청크에서 제거
+- 베이스라인: 가장 큰 client chunk 1,744KB raw / 475KB gz (97%가 mapbox-gl)
+- 모바일 LCP 5.5s → 개선 예상 (Lighthouse 재측정은 배포 후)
+
 ## [v0.6.0] - 2026-05-06 - 모바일 SidePanel bottom sheet
 
 좁은 화면(`max-width: 640px`)에서 동 상세 패널을 우측 사이드 패널 대신 하단 시트로 슬라이드업. 기존 `position: absolute; right: 60; width: 360`은 375px 폰에서 화면을 거의 가로로 다 차지해 가독성·터치 타겟이 좁았다. 백드롭 탭으로 닫기 + 기존 × 버튼 + 상단 드래그 핸들 시각 affordance만 추가, 스와이프 제스처는 의존성 회피 차원에서 제외. 데스크톱 레이아웃은 그대로.
