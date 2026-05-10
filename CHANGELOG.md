@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 강북 14구 최근 거래 50건 marquee 티커
+## [v0.12.0] - 2026-05-11 - 강북 14구 최근 거래 50건 marquee 티커
 
 ### 추가
 - `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. `use cache: remote`, ETL freshness 문자열, `Server-Timing` 포함.
