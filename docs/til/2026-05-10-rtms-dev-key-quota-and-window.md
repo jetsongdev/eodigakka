@@ -19,7 +19,15 @@ raw 테이블은 `ON CONFLICT DO NOTHING`으로 누적되지만, ETL이 fetch �
    RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
    .venv-etl/bin/python3 etl/fetch_rtms.py --months 24
    ```
-3. **문서**: SPEC ADR-012, README "풀 재적재" 섹션, 본 TIL.
+3. **이어받기 옵션 추가** — RTMS 응답 reset 같은 일시 오류 이후 특정 구간만 다시 돌리기 위해 `--start-month YYYYMM --end-month YYYYMM` 지원. 예: 2024-06까지 채운 뒤 더 과거 12개월을 추가할 때:
+   ```bash
+   ETL_DISABLED=0 \
+   DATABASE_URL=$(grep DATABASE_URL etl/.env | cut -d= -f2-) \
+   RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
+   .venv-etl/bin/python3 etl/fetch_rtms.py --start-month 202405 --end-month 202306
+   ```
+4. **일시 오류 재시도** — `requests.exceptions.RequestException` 계열 오류는 월/구/거래유형 단위 최대 3회 재시도. `ETL fetch: year_month=... gu_code=... trade_type=...` 로그로 실패 위치를 좁힌다.
+5. **문서**: SPEC ADR-012, README "풀 재적재 / 이어받기" 섹션, CLAUDE ETL 운영 메모, 본 TIL.
 
 ## 한도 확인 절차
 
@@ -35,9 +43,10 @@ raw 테이블은 `ON CONFLICT DO NOTHING`으로 누적되지만, ETL이 fetch �
 - 정기 3개월: ≈ 420 호출 (한도의 4.2%)
 - 풀 재적재 24개월: ≈ 3,360 호출 (한도의 33.6%, 한 방에 안전)
 - 2년 이상은 하루에 못 끝낼 가능성 — `--months 36` 시 ≈ 5,040, 3개월 더하면 8,400로 한도 근접
+- 더 과거 backfill은 `--start-month/--end-month`로 12개월 단위 실행 권장. 이미 적재된 raw는 `ON CONFLICT DO NOTHING`으로 중복 무시.
 
 ## 교훈
 - "3개월"이라는 표현이 SPEC에 여러 번 등장하는데, 의미가 두 가지로 나뉜다: (a) MV 통계 윈도우(고정, ADR-005), (b) ETL fetch 윈도우(가변, ADR-012). 두 layer를 분리하면 "통계 안정성"과 "거래 깊이"를 독립적으로 다룰 수 있다.
 - RTMS 신고지연이 한국 부동산 데이터의 구조적 특징 — `tx_count_3m`이 작은 동도 1년치 누적해 보면 표본이 충분할 수 있음. 향후 `tx_count_12m` 같은 보조 통계 추가 검토 가능.
 - 외부 API 한도는 코드에 박지 말고 포털 확인 절차를 TIL에 남기는 게 stale 안전. 한도가 정책상 변경되면 코드 상수보다 문서 갱신이 빠름.
-- argparse 옵션 추가 시 단위 테스트 — `parse_args(["--months", "24"])` / `parse_args(["--months", "0"])` SystemExit / `month_tokens(count=24)` cross-year token. 외부 환경 의존 없는 순수 함수라 venv·DB·네트워크 없이 회귀 검증.
+- argparse 옵션 추가 시 단위 테스트 — `parse_args(["--months", "24"])` / `parse_args(["--months", "0"])` SystemExit / `month_tokens(count=24)` cross-year token / `month_range_desc("202509", "202406")` / retry exhaustion. 외부 환경 의존 없는 순수 함수라 venv·DB·네트워크 없이 회귀 검증.

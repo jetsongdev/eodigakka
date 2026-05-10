@@ -90,7 +90,8 @@ RTMS API ─→ ETL (Python) ─→ Postgres+PostGIS ─→ Next.js API ─→ P
 ### 1. ETL (`etl/fetch_rtms.py`)
 
 - **호출**: `PublicDataReader.TransactionPrice(api_key)` → RTMS Dev 엔드포인트 (운영 키 미승인, ADR-007)
-- **스코프**: `GANGBUK_14` 강북 14구 × 최근 3개월 (`month_tokens`) × 매매·전월세
+- **스코프**: `GANGBUK_14` 강북 14구 × 최근 3개월 (`month_tokens`) × 매매·전월세. 수동 backfill은 `--months N` 또는 `--start-month YYYYMM --end-month YYYYMM` 명시 범위로 실행
+- **일시 오류 대응**: RTMS `requests` 계열 오류는 월/구/거래유형 단위 최대 3회 재시도. 실패 위치는 `ETL fetch: year_month=... gu_code=... trade_type=...` 로그로 확인
 - **bjd_code 보정**: `apply_bjd_fallback` — `법정동시군구코드+법정동읍면동코드` 결합 → 실패 시 `(시군구, 동이름)` lookup으로 `bjd_polygon`에서 가져옴
 - **취소 거래 필터**: `filter_cancelled` — `해제여부 == "O"`인 행만 제외 (TIL `rtms-haeje-filter`)
 - **재실행 안전**: `INSERT … ON CONFLICT DO NOTHING` (raw 테이블의 unique key가 중복 제거)
@@ -328,6 +329,7 @@ curl -H "x-vercel-protection-bypass: $BYPASS" "$PREVIEW/api/health"
 같은 워크플로우가 2회 이상 반복되면 즉시 `/skill-creator:skill-creator` 호출해서 스킬화 검토. 예시:
 - TIL + CHANGELOG + tasks 일괄 갱신 → `til-flow` 스킬로 분리됨 (2026-05-04)
 - 스냅샷 캡처 → `snapshot` 스킬 (글로벌)
+  - eodigakka 스냅샷 기본 선택 폴리곤: **북아현동** (`bjd_code=1141011000`). 별도 지시가 없으면 스냅샷 캡처 전에 북아현동 폴리곤을 선택해 SidePanel/선택 강조 상태를 기본 기준으로 남긴다.
 - client-side 토큰 환경별 분리 발급 + Vercel env 분리 + redeploy + 검증 → `client-token-rotation` 스킬로 분리됨 (2026-05-05). Mapbox 토큰 회전이 첫 인스턴스, Sentry DSN·Analytics·Stripe publishable key 등 재적용 예정
 - 향후 후보: 모바일 UX 회귀 검증, 동 폴리곤 적재 절차 등
 

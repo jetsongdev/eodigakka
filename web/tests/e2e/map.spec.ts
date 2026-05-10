@@ -37,6 +37,20 @@ test('폴리곤 카운트 표시가 보인다', async ({ page }) => {
   await expect(page.getByText(/폴리곤\s+467개|폴리곤/, { exact: false })).toBeVisible();
 });
 
+test('최근 거래 티커가 footer 바로 위에 보이고 항목 클릭으로 SidePanel을 연다', async ({
+  page,
+}) => {
+  await openMap(page);
+
+  const ticker = page.getByRole('region', { name: '강북 14구 최근 거래 50건' });
+  await expect(ticker).toBeVisible();
+  await expect(ticker.locator('.recent-ticker-track')).toHaveCount(1);
+
+  await ticker.getByRole('button').first().click();
+
+  await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
+});
+
 test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }) => {
   await openMap(page);
 
@@ -115,6 +129,21 @@ test('.mapboxgl-canvas 요소가 렌더링된다', async ({ page }) => {
   await openMap(page);
 
   await expect(page.locator('.mapboxgl-canvas')).toHaveCount(1);
+});
+
+test('모바일 — 접힌 컨트롤 밖에서 범례 chip을 열 수 있다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openMap(page);
+
+  const legendButton = page.getByRole('button', { name: '범례 열기' });
+  await expect(legendButton).toBeVisible();
+
+  await legendButton.click();
+
+  const legendDialog = page.getByRole('dialog', { name: '지도 범례' });
+  await expect(legendDialog).toBeVisible();
+  await expect(legendDialog.getByText('조건 통과 (high)')).toBeVisible();
+  await expect(legendDialog.getByText('미통과/표본 부족')).toBeVisible();
 });
 
 // SidePanel은 폴리곤 클릭으로만 열린다. Playwright native mouse는 synthetic

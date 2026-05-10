@@ -7,7 +7,9 @@ import pandas as pd
 from fetch_rtms import (
     DEFAULT_MONTHS,
     MAX_MONTHS,
+    fetch_month,
     filter_cancelled,
+    month_range_desc,
     month_tokens,
     parse_args,
     update_etl_status,
@@ -81,6 +83,22 @@ class MonthTokensTest(unittest.TestCase):
         self.assertEqual(tokens, sorted(tokens, reverse=True))
 
 
+class MonthRangeDescTest(unittest.TestCase):
+    def test_returns_descending_inclusive_months(self) -> None:
+        tokens = month_range_desc("202509", "202406")
+        self.assertEqual(tokens[0], "202509")
+        self.assertEqual(tokens[-1], "202406")
+        self.assertEqual(len(tokens), 16)
+        self.assertEqual(tokens, sorted(tokens, reverse=True))
+
+    def test_single_month_range(self) -> None:
+        self.assertEqual(month_range_desc("202509", "202509"), ["202509"])
+
+    def test_rejects_reversed_range(self) -> None:
+        with self.assertRaises(ValueError):
+            month_range_desc("202406", "202509")
+
+
 class ParseArgsTest(unittest.TestCase):
     def test_default_months_matches_default_constant(self) -> None:
         ns = parse_args([])
@@ -103,6 +121,63 @@ class ParseArgsTest(unittest.TestCase):
     def test_above_max_rejected(self) -> None:
         with self.assertRaises(SystemExit):
             parse_args(["--months", str(MAX_MONTHS + 1)])
+
+    def test_start_and_end_month_override_months(self) -> None:
+        ns = parse_args(["--months", "24", "--start-month", "202509", "--end-month", "202406"])
+        self.assertEqual(ns.start_month, "202509")
+        self.assertEqual(ns.end_month, "202406")
+
+    def test_start_or_end_month_alone_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args(["--start-month", "202509"])
+        with self.assertRaises(SystemExit):
+            parse_args(["--end-month", "202406"])
+
+    def test_invalid_month_format_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args(["--start-month", "2025-09", "--end-month", "202406"])
+
+
+class FetchMonthRetryTest(unittest.TestCase):
+    def test_retries_transient_request_errors(self) -> None:
+        import requests
+
+        api = MagicMock()
+        expected = pd.DataFrame({"ok": [1]})
+        api.get_data.side_effect = [
+            requests.exceptions.ChunkedEncodingError("reset"),
+            expected,
+        ]
+
+        result = fetch_month(
+            api,
+            "11440",
+            "202509",
+            "전월세",
+            retries=2,
+            retry_sleep_seconds=0,
+        )
+
+        self.assertIs(result, expected)
+        self.assertEqual(api.get_data.call_count, 2)
+
+    def test_raises_after_retry_exhaustion(self) -> None:
+        import requests
+
+        api = MagicMock()
+        api.get_data.side_effect = requests.exceptions.ChunkedEncodingError("reset")
+
+        with self.assertRaises(requests.exceptions.ChunkedEncodingError):
+            fetch_month(
+                api,
+                "11440",
+                "202509",
+                "전월세",
+                retries=2,
+                retry_sleep_seconds=0,
+            )
+
+        self.assertEqual(api.get_data.call_count, 2)
 
 
 if __name__ == "__main__":

@@ -14,12 +14,58 @@
 
 ### 추가
 - `web/app/page.tsx` — `localStorage`에 마지막 확인 앱 버전을 저장하고, 최초 방문 시 핵심 기능 힌트 UI를 표시. 저장된 버전이 현재 앱 버전과 다르면 새 버전 안내를 표시하고 닫을 때 현재 버전으로 갱신.
-- `docs/snapshots/17-whats-new-first-visit-hint/` — 최초 방문 힌트가 열린 데스크톱/모바일 상태 스냅샷 추가.
+- `docs/snapshots/20-whats-new-first-visit-hint/` — 최초 방문 힌트가 열린 데스크톱/모바일 상태 스냅샷 추가.
 
 ### 검증
 - `npx tsc --noEmit`
 - `git diff --check`
 - Playwright smoke: 최초 방문 안내 노출, 닫기 후 `eodigakka:last-seen-version=0.11.1` 저장 및 재로딩 후 미노출 확인. 이전 버전 `0.10.0` 저장 시 새 버전 안내 노출과 현재 버전 저장 확인.
+
+---
+
+## [v0.12.2] - 2026-05-11 - 최근 거래 티커 구 이름 fallback
+
+### 추가
+- `docs/snapshots/19-recent-ticker-label/` — 최근 거래 티커 왼쪽 고정 라벨이 보이는 데스크톱·모바일 시각 기록.
+
+### 수정
+- `web/app/api/recent/route.ts` — 운영 `bjd_polygon.sigungu` 값이 비어 있어 최근 거래 티커 위치가 `·응암동`처럼 표시될 수 있던 문제를 보정. `bjd_code` 앞 5자리로 서울 25구 이름을 fallback 매핑해 `/api/recent` 응답의 `sigungu`를 항상 채운다.
+- `web/components/RecentTickerBar.tsx` — 티커 위치 표기를 `은평·응암동` 대신 `은평구·응암동`처럼 구 단위까지 보이도록 조정.
+- `web/components/RecentTickerBar.tsx` — 티커 왼쪽에 `최근 거래 정보` 고정 라벨을 추가해 흐르는 항목들이 최근 실거래 데이터임을 즉시 인식할 수 있게 조정.
+
+### 검증
+- Production `/api/recent` 응답 200·50건 반환 확인. 기존 배포 응답에서는 `sigungu` 50/50건이 빈 문자열임을 확인해 회귀 원인을 확정.
+
+---
+
+## [v0.12.1] - 2026-05-11 - 모바일 범례 floating chip
+
+### 추가
+- 모바일에서 컨트롤 패널 내부 범례를 숨기고 지도 좌하단 `범례` floating chip으로 분리. chip을 누르면 compact `지도 범례` sheet가 열리고, SidePanel bottom sheet가 열리면 겹침 방지를 위해 chip을 숨김.
+- `docs/snapshots/18-mobile-legend-chip/` — 북아현동 선택 데스크톱 기준 + 모바일 chip 기본/open/selected 상태 시각 기록.
+
+### 변경
+- `tasks.md` 모바일 범례 분리 항목 완료 처리.
+- `CLAUDE.md` snapshot 기본 선택 폴리곤을 북아현동(`bjd_code=1141011000`)으로 문서화.
+
+### 검증
+- `git diff --check`
+- `cd web && ./node_modules/.bin/tsc --noEmit`
+
+---
+
+## [v0.12.0] - 2026-05-11 - 강북 14구 최근 거래 50건 marquee 티커
+
+### 추가
+- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. `use cache: remote`, ETL freshness 문자열, `Server-Timing` 포함.
+- `web/components/RecentTickerBar.tsx` — footer 바로 위에 표시되는 최근 거래 marquee 티커 추가. hover/focus 시 정지, `prefers-reduced-motion`에서는 수동 가로 스크롤로 폴백.
+
+### 변경
+- `web/app/page.tsx` — `/api/recent`를 mount 시 1회 가져와 티커에 연결하고, 항목 클릭은 기존 `selectedBjd` SidePanel 경로로 전달.
+
+### 검증
+- `web/tests/e2e/api.spec.ts` — `/api/recent` 응답 스키마와 50건 제한 회귀 가드 추가.
+- `web/tests/e2e/map.spec.ts` — 티커 노출 및 항목 클릭 → SidePanel 열림 회귀 가드 추가.
 
 ---
 
