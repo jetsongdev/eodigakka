@@ -1,6 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 async function mockMapPageApis(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('eodigakka:last-seen-version', 'dev');
+  });
+
   await page.route('**/api/affordable?**', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
