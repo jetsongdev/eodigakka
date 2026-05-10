@@ -10,6 +10,19 @@
 
 ---
 
+## [v0.12.3] - 2026-05-11 - 최초 방문 힌트와 버전 변경 안내
+
+### 추가
+- `web/app/page.tsx` — `localStorage`에 마지막 확인 앱 버전을 저장하고, 최초 방문 시 핵심 기능 힌트 UI를 표시. 저장된 버전이 현재 앱 버전과 다르면 새 버전 안내를 표시하고 닫을 때 현재 버전으로 갱신.
+- `docs/snapshots/20-whats-new-first-visit-hint/` — 최초 방문 힌트가 열린 데스크톱/모바일 상태 스냅샷 추가.
+
+### 검증
+- `npx tsc --noEmit`
+- `git diff --check`
+- Playwright smoke: 최초 방문 안내 노출, 닫기 후 `eodigakka:last-seen-version=0.11.1` 저장 및 재로딩 후 미노출 확인. 이전 버전 `0.10.0` 저장 시 새 버전 안내 노출과 현재 버전 저장 확인.
+
+---
+
 ## [v0.12.2] - 2026-05-11 - 최근 거래 티커 구 이름 fallback
 
 ### 추가
