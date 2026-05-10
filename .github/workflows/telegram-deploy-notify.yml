@@ -29,10 +29,12 @@ jobs:
           if echo "$PR_JSON" | jq -e 'type != "array"' >/dev/null 2>&1; then
             PR_JSON="[]"
           fi
-          echo "number=$(echo "$PR_JSON"   | jq -r '.[0].number   // empty')" >> "$GITHUB_OUTPUT"
-          echo "url=$(echo "$PR_JSON"      | jq -r '.[0].html_url // empty')" >> "$GITHUB_OUTPUT"
-          echo "title=$(echo "$PR_JSON"    | jq -r '.[0].title    // empty')" >> "$GITHUB_OUTPUT"
-          echo "head_ref=$(echo "$PR_JSON" | jq -r '.[0].head.ref // empty')" >> "$GITHUB_OUTPUT"
+          {
+            echo "number=$(echo "$PR_JSON"   | jq -r '.[0].number   // empty')"
+            echo "url=$(echo "$PR_JSON"      | jq -r '.[0].html_url // empty')"
+            echo "title=$(echo "$PR_JSON"    | jq -r '.[0].title    // empty')"
+            echo "head_ref=$(echo "$PR_JSON" | jq -r '.[0].head.ref // empty')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Checkout repo at deployed SHA
         uses: actions/checkout@v4

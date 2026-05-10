@@ -37,7 +37,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] **확대/축소 버튼 크기 키우기** (2026-05-08) — Mapbox `NavigationControl`의 기본 30×30 → 44×44(권장 터치 타겟)로 키움. `web/app/globals.css`에 `.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in/out` width/height + 아이콘 background-size 26×26 override. 모든 viewport 공통 — 데스크톱도 hit area 확대로 사용성 ↑.
 
 ### B. 운영 모니터링 도입 (GHA cron 시작했으니 자연 다음 단계)
-- [ ] Neon free 0.5GB 한도 모니터링 — `pg_database_size('neondb')` 주간 점검, 80% 도달 시 alert (Phase B 아래 항목 보강)
+- [x] Neon free 0.5GB 한도 모니터링 (2026-05-11) — `.github/workflows/neon-storage-alert.yml` 추가. 매주 월요일 KST 05:30 (`30 20 * * 0` UTC) `pg_database_size(current_database())`를 점검하고 0.5GB 기준 80% 이상이면 `neon-storage` 이슈 생성. `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 수동 검증.
 - [x] Healthchecks.io ping (2026-05-05) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴 (값 없으면 스킵하고 빌드 계속). secret 등록 후 다음 cron firing(2026-05-06 03:00 KST)부터 즉시 효력.
 - [x] **cron firing 지연 알림** (2026-05-09) — `.github/workflows/etl-stale-alert.yml` 추가. KST 05:00 (`0 20 * * *` UTC, ETL firing 03:00 + 2h GHA scheduler 지연 쿠션) 발사. `psql`로 `etl_job_status.last_succeeded_at`이 `NOW() - INTERVAL '25 hours'`보다 오래되면 stale 판정. dedup: 같은 label `etl-stale` open 이슈 있으면 skip. `workflow_dispatch` `force_alert: bool` input으로 dedup·이슈 본문 수동 검증. label 사전 생성(`gh label create --force`) + `permissions: { issues: write }`. Healthchecks ping이 못 잡는 silent success(ETL exit 0이지만 `update_etl_status` 미도달) 보강.
 
@@ -359,7 +359,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 ETL이 일별로 안정적으로 돌고 데이터가 한 달 이상 쌓인 시점에 도입 검토.
 
-- [ ] **Neon free plan 0.5GB 한도 모니터링** — `pg_database_size('neondb')` 주간 query. 80% (≈400MB) 도달 시 alert + plan 업그레이드 또는 raw 테이블 TTL 검토. 현재 dump 7MB라 여유 큼이지만 서울 25구·12개월 누적 시 빨리 차오를 수 있음
+- [x] **Neon free plan 0.5GB 한도 모니터링** (2026-05-11) — `.github/workflows/neon-storage-alert.yml`. 매주 월요일 KST 05:30 `pg_database_size(current_database())` 주간 query. 80% 도달 시 `neon-storage` 이슈 생성 + plan 업그레이드 또는 raw 테이블 TTL 검토. `force_alert` 수동 검증과 label dedup 포함.
 - [x] **Healthchecks.io ping** (2026-05-05 완료) — `etl.yml`에 start/success/fail 3-step 추가. `HEALTHCHECKS_PING_URL` secret graceful skip 패턴. 새벽 03:00에 안 돌면 healthchecks.io에서 이메일/Telegram 알림. 무료 tier.
 - [x] **cron firing 지연 알림** (2026-05-09) — `.github/workflows/etl-stale-alert.yml`. KST 05:00 발사 + 25h interval stale 판정 + label `etl-stale` dedup + `force_alert` workflow_dispatch input. 상세는 「A. UX 마무리」 위 B 섹션 항목 참조.
 - [ ] **/api/health 외부 ping** — Uptime Kuma 셀프호스트 또는 Healthchecks.io의 HTTP check로 5분마다 ping

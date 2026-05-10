@@ -10,6 +10,21 @@
 
 ---
 
+## [Unreleased] - Neon storage 한도 모니터링
+
+### 추가
+- `.github/workflows/neon-storage-alert.yml` — 주 1회 Neon DB size를 점검하고 free plan 0.5GB 기준 80% 이상이면 `neon-storage` 이슈를 생성하는 운영 모니터링 workflow 추가.
+
+### 변경
+- `tasks.md` — Phase B 운영 모니터링의 Neon storage 항목 완료 처리.
+- `.github/workflows/etl.yml`, `.github/workflows/telegram-deploy-notify.yml` — 기존 `actionlint` shellcheck 경고 정리.
+
+### 검증
+- `actionlint .github/workflows/neon-storage-alert.yml`
+- `git diff --check`
+
+---
+
 ## [v0.12.2] - 2026-05-11 - 최근 거래 티커 구 이름 fallback
 
 ### 추가
