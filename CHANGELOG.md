@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - Neon storage 한도 모니터링
+## [v0.12.3] - 2026-05-11 - Neon storage 한도 모니터링
 
 ### 추가
 - `.github/workflows/neon-storage-alert.yml` — 주 1회 Neon DB size를 점검하고 free plan 0.5GB 기준 80% 이상이면 `neon-storage` 이슈를 생성하는 운영 모니터링 workflow 추가.
