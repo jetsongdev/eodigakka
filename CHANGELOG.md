@@ -10,6 +10,20 @@
 
 ---
 
+## [Unreleased] - 모바일 범례 floating chip
+
+### 추가
+- 모바일에서 컨트롤 패널 내부 범례를 숨기고 지도 좌하단 `범례` floating chip으로 분리. chip을 누르면 compact `지도 범례` sheet가 열리고, SidePanel bottom sheet가 열리면 겹침 방지를 위해 chip을 숨김.
+- `docs/snapshots/17-mobile-legend-chip/` — 북아현동 선택 데스크톱 기준 + 모바일 chip 기본/open/selected 상태 시각 기록.
+
+### 변경
+- `tasks.md` 모바일 범례 분리 항목 완료 처리.
+- `CLAUDE.md` snapshot 기본 선택 폴리곤을 북아현동(`bjd_code=1141011000`)으로 문서화.
+
+### 검증
+- `git diff --check`
+- `cd web && ./node_modules/.bin/tsc --noEmit`
+
 ## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
 
 Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.
