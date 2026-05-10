@@ -10,21 +10,21 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (2026-05-10 갱신, Stage 2a PR 작성 직후)**:
+**현재 우선순위 추천 (2026-05-10 갱신, Stage 2b PR 작성 직후)**:
 
-🚨 **최우선 — Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1·2a 진행):
+🚨 **Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1·2a·2b 진행):
 
-| API | Cold (2026-05-09) | Stage 1 후 | Stage 2a 후 (목표) | 비고 |
+| API | Cold (2026-05-09) | Stage 1 후 | Stage 2a 후 | Stage 2b 후 (목표) |
 |---|---|---|---|---|
-| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | 동일 | **fresh ~50ms** 기대 | Stage 2a로 fresh 1572ms → ~50ms (cold), warm 1.7ms 검증 완료 |
-| `/api/polygons` | **10.53s · 1142kB** | **29ms · 141kB** ✓ | 동일 | Stage 1 v0.8.2로 직격 |
-| `/api/dong/[bjd]/complexes` | warm 2.13s | Server-Timing 박음 ✓ | Stage 2b 대상 | 6 sub-query 모두 ~1.6s 동시 종료 — Neon 콜드 + 6 RTT dominant. cache 답 |
+| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | 동일 | trade fresh **220ms** ✓ (1572→220, 7배 ↓) | **첫 호출 후 모두 ~ms** (cacheTag) |
+| `/api/polygons` | **10.53s · 1142kB** | **29ms · 141kB** ✓ | 동일 | 동일 (이미 정적, cacheLife('max')로 마이그레이션) |
+| `/api/dong/[bjd]/complexes` | warm 2.13s | 6-sub Server-Timing ✓ | 동일 | **첫 호출 후 모두 ~ms** (per-bjd cacheTag) |
 
-1. 🔴 **Stage 2a PR (진행 중, 본 워크트리)** — etl_job_status 컬럼화로 freshness 쿼리 우회. fresh 1000배 ↓ 검증 완료
-2. 🔴 **Stage 2b PR (다음)** — affordable `'use cache'` + cacheTag + complexes per-bjd cache + ETL→/api/revalidate webhook + complexes 측정 방법론 fix. Vercel env에 `REVALIDATE_SECRET` 사전 등록 필요. 임장 검증·외부 공유 전 필수 통과
-3. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — Stage 2 처리 후 재진입
-4. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
-5. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — Stage 2로 latency 정상화 후 진행 의미 있음
+1. 🔴 **Stage 2b PR (진행 중, 본 워크트리)** — `cacheComponents: true` + 모든 API route `'use cache'` 마이그레이션 + `/api/revalidate` route 신설 + ETL workflow 03:00 cache invalidate webhook
+2. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — Stage 2b 머지 후 재진입
+3. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — Stage 2b로 latency 정상화 후 진행 의미 있음
+5. ⚪ **검색 축 pivot brainstorming** (모드 → 금액 기준) — 임장 1회 후 재평가
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)

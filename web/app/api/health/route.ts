@@ -3,9 +3,6 @@ import { sql } from 'kysely';
 
 import { db } from '../../../lib/db';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 interface CountRow {
   trade_count: string | number;
   rent_count: string | number;

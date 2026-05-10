@@ -10,6 +10,36 @@
 
 ---
 
+## [Unreleased] - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
+
+Stage 2a(v0.8.3)로 freshness 쿼리는 fresh=220ms로 직격됐지만 Production cold에선 stats(`mv_dong_stats` JOIN) 쿼리가 새 dominant이 됨(cold 446ms~1711ms). Stage 2b는 응답 자체를 edge cache에 박는 마지막 한 방.
+
+### 변경
+- `web/next.config.js` — `cacheComponents: true` 활성화 (Next.js 16 PPR + 'use cache' directive). polygons의 기존 `dynamic = 'force-static'`은 cacheComponents와 호환 안 돼서 모든 API route의 route segment config(`runtime`, `dynamic`) 제거 + cache directive로 마이그레이션 (next-cache-components 가이드 표 따름)
+- `web/app/api/affordable/route.ts` — SQL 부분을 `fetchAffordableData(mode, size)` 함수에 분리 + `'use cache'` + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats')`. cache key는 mode×size 8조합(cash는 클라 사이드 필터). 첫 호출만 DB, 이후 모든 호출 ~1ms edge 응답 기대
+- `web/app/api/dong/[bjd]/complexes/route.ts` — 6 sub-query를 `fetchComplexesData(bjd)`에 분리 + `'use cache'` + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats', 'complexes-{bjd}')`. bjd 인자가 자동 cache key. Stage 1 측정의 connection pool 콜드 1.5s 비용 → 첫 호출 외엔 0
+- `web/app/api/polygons/route.ts` — `dynamic = 'force-static'` → `'use cache'` + `cacheLife('max')` + `cacheTag('bjd_polygon')` 마이그레이션. 동작 동일(0번째 사용자도 즉시), invalidation 가능해짐. ETL은 폴리곤 안 건드리니 invalidate trigger 없음
+- `web/app/api/health/route.ts` — `runtime`/`dynamic` 제거. cacheComponents 모드의 default dynamic 동작 유지
+
+### 추가
+- `web/app/api/revalidate/route.ts` 신설 — POST endpoint. `Authorization: Bearer $REVALIDATE_SECRET` 검증 후 `revalidateTag(tag, 'default')` 호출. secret 미설정·불일치 모두 401(외부 정보 누설 방지). console.error로 운영 단서 남김
+- `.github/workflows/etl.yml` — success ping 다음 step에 `curl -X POST $REVALIDATE_URL?tag=mv_dong_stats -H "Authorization: Bearer $REVALIDATE_SECRET"` 추가. graceful skip(secret 없으면 skip). ETL 03:00 갱신 직후 cache invalidate → 다음 사용자 응답에 새 데이터 박힘
+- `web/tests/e2e/api.spec.ts` — `/api/revalidate` 401 가드 2개(auth 누락 / 잘못된 token). dev/preview/production 일관 401 응답 회귀 가드
+
+### 결정
+- **`cacheLife({ revalidate: 3600 })`** — ETL이 KST 03:00에만 데이터 갱신. 1h TTL은 ETL→cache invalidate webhook이 못 돌아도 최대 1h만 stale. webhook 정상 작동하면 03:00에 즉시 invalidate → stale window 0
+- **`revalidateTag(tag, 'default')` 두 번째 인자** — Next.js 16 cacheComponents 모드에서 profile 인자 필수. `'default'`로 호출해 일반 cacheLife 항목 매칭. polygons는 `'max'` profile이라 별개 — ETL이 폴리곤 안 건드려서 invalidate trigger 없으니 영향 없음
+- **secret 미설정도 401 반환** — production에서 env 누락은 운영 에러지만 응답 본문에 노출하면 attacker에 단서. console.error로 server log에만 남기고 응답은 401 일관. e2e도 환경 무관 통과
+
+### 검증
+- `npm run build` 그린, "Cache Components enabled" 로그 + 8 routes 정상 빌드
+- `npx playwright test tests/e2e/api.spec.ts` 8/8 그린 (기존 6 + 새 revalidate 가드 2)
+- 로컬 dev 서버 `/api/affordable` cache hit 동작 확인:
+  - 1번째 호출: `_timing: { stats_ms: 54.3, fresh_ms: 53.2, db_ms: 54.3 }` (cache MISS, DB hit)
+  - 2번째 호출(같은 mode×size): **정확히 같은 _timing** (cache HIT, DB hit 없음)
+  - mode 변경 호출(jeonse): 새 cache entry → 새 DB hit `stats_ms: 20.4`
+- `/api/revalidate` auth 검증: 헤더 없을 때·잘못된 token 모두 401 (server log에 env 누락 단서)
+
 ## [v0.8.3] - 2026-05-10 - perf(web): /api/affordable freshness 쿼리 우회 — etl_job_status 컬럼화 (Stage 2a)
 
 Stage 1(v0.8.2) Production 측정에서 `/api/polygons` cold 10.53s → 29ms는 직격됐지만 `/api/affordable` cold 3.46s 중 fresh=1572ms 부분은 그대로. Stage 2a는 D 옵션(b) 적용 — `MAX(contract_date) FROM tx_apt_trade/rent` raw 풀스캔을 `etl_job_status` 1행 SELECT로 우회. ETL이 03:00 갱신 끝나고 max_contract_date를 status 테이블에 기록하면 API는 그 값만 읽음.
