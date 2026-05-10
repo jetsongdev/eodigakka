@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 지도 페이지 구조 리팩터링
+## [v0.13.1] - 2026-05-11 - 지도 페이지 구조 리팩터링
 
 ### 추가
 - `docs/refactors/2026-05-11-map-page-structure.md` — route/client 분리, query state helper 분리, Playwright 안정화 내용을 정리한 리팩터링 리포트.
