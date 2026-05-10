@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - URL 쿼리 파라미터 양방향 동기화
+## [v0.9.0] - 2026-05-10 - URL 쿼리 파라미터 양방향 동기화
 
 PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반영. 새로고침·딥링크 공유·외부 진입 시 슬라이더·토글 상태 그대로 복원. Phase 1 임장 후보 목록을 URL로 주고받을 수 있게 됨.
 
