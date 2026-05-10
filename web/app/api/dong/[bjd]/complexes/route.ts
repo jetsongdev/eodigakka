@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cacheLife, cacheTag } from 'next/cache';
 import { sql } from 'kysely';
 
 import { db } from '../../../../../lib/db';
 import { buildEvidence } from '../../../../../lib/filter';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 interface TopComplexRow {
   complex_name: string;
@@ -32,18 +30,28 @@ interface DistributionRow {
   confidence: 'high' | 'low' | 'insufficient';
 }
 
-export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ bjd: string }> },
-) {
-  const { bjd } = await context.params;
+interface ComplexesData {
+  bjdName: string | null;
+  tradeTop: TopComplexRow[];
+  jeonseTop: TopComplexRow[];
+  recentTrades: RecentTxRow[];
+  recentJeonse: RecentTxRow[];
+  distributions: DistributionRow[];
+  timing: {
+    dong_name_ms: number;
+    trade_top_ms: number;
+    jeonse_top_ms: number;
+    recent_trade_ms: number;
+    recent_jeonse_ms: number;
+    distribution_ms: number;
+    db_ms: number;
+  };
+}
 
-  if (!/^\d{10}$/.test(bjd)) {
-    return NextResponse.json(
-      { error: 'bjd must be a 10-digit legal dong code', evidence: '법정동코드 형식 오류' },
-      { status: 400 },
-    );
-  }
+async function fetchComplexesData(bjd: string): Promise<ComplexesData> {
+  'use cache';
+  cacheLife({ revalidate: 3600 });
+  cacheTag('mv_dong_stats', `complexes-${bjd}`);
 
   const t0 = performance.now();
   let dongNameMs = 0;
@@ -157,8 +165,42 @@ export async function GET(
     distributionMs,
   );
 
-  const bjdName = dongNameResult.rows[0]?.bjd_name;
-  if (!bjdName) {
+  return {
+    bjdName: dongNameResult.rows[0]?.bjd_name ?? null,
+    tradeTop: tradeTopResult.rows,
+    jeonseTop: jeonseTopResult.rows,
+    recentTrades: recentTradesResult.rows,
+    recentJeonse: recentJeonseResult.rows,
+    distributions: distributionResult.rows,
+    timing: {
+      dong_name_ms: Number(dongNameMs.toFixed(1)),
+      trade_top_ms: Number(tradeTopMs.toFixed(1)),
+      jeonse_top_ms: Number(jeonseTopMs.toFixed(1)),
+      recent_trade_ms: Number(recentTradeMs.toFixed(1)),
+      recent_jeonse_ms: Number(recentJeonseMs.toFixed(1)),
+      distribution_ms: Number(distributionMs.toFixed(1)),
+      db_ms: Number(dbMs.toFixed(1)),
+    },
+  };
+}
+
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ bjd: string }> },
+) {
+  const { bjd } = await context.params;
+
+  if (!/^\d{10}$/.test(bjd)) {
+    return NextResponse.json(
+      { error: 'bjd must be a 10-digit legal dong code', evidence: '법정동코드 형식 오류' },
+      { status: 400 },
+    );
+  }
+
+  const tEvalStart = performance.now();
+  const data = await fetchComplexesData(bjd);
+
+  if (!data.bjdName) {
     return NextResponse.json(
       { error: 'dong not found', evidence: 'bjd_polygon 매칭 실패' },
       { status: 404 },
@@ -166,10 +208,10 @@ export async function GET(
   }
 
   const candidateDates = [
-    recentTradesResult.rows[0]?.contract_date,
-    recentJeonseResult.rows[0]?.contract_date,
-    tradeTopResult.rows[0]?.last_contract_date,
-    jeonseTopResult.rows[0]?.last_contract_date,
+    data.recentTrades[0]?.contract_date,
+    data.recentJeonse[0]?.contract_date,
+    data.tradeTop[0]?.last_contract_date,
+    data.jeonseTop[0]?.last_contract_date,
   ].filter((d): d is string => Boolean(d));
   const lastEvidenceDate =
     candidateDates.length > 0
@@ -185,21 +227,21 @@ export async function GET(
     evidence: `RTMS ${row.contract_date} 신고분`,
   });
 
-  const recentTrades = recentTradesResult.rows.map(mapRecent);
-  const recentJeonse = recentJeonseResult.rows.map(mapRecent);
-  const evalMs = performance.now() - t0 - dbMs;
+  const recentTrades = data.recentTrades.map(mapRecent);
+  const recentJeonse = data.recentJeonse.map(mapRecent);
+  const evalMs = performance.now() - tEvalStart - data.timing.db_ms;
 
   return NextResponse.json(
     {
       bjd_code: bjd,
-      bjd_name: bjdName,
-      trade_top5: tradeTopResult.rows.map((row) => ({
+      bjd_name: data.bjdName,
+      trade_top5: data.tradeTop.map((row) => ({
         complex_name: row.complex_name,
         median_man: Math.round(Number(row.median_man)),
         tx_count_3m: row.tx_count_3m,
         evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
       })),
-      jeonse_top5: jeonseTopResult.rows.map((row) => ({
+      jeonse_top5: data.jeonseTop.map((row) => ({
         complex_name: row.complex_name,
         median_man: Math.round(Number(row.median_man)),
         tx_count_3m: row.tx_count_3m,
@@ -207,7 +249,7 @@ export async function GET(
       })),
       recent_trades: recentTrades,
       recent_jeonse: recentJeonse,
-      distributions: distributionResult.rows.map((row) => ({
+      distributions: data.distributions.map((row) => ({
         mode: row.mode,
         size_bucket: row.size_bucket,
         p25_man: row.p25_man === null ? null : Math.round(Number(row.p25_man)),
@@ -219,23 +261,17 @@ export async function GET(
       generated_at: new Date().toISOString(),
       evidence: buildEvidence(
         recentTrades.length + recentJeonse.length,
-        tradeTopResult.rows.length + jeonseTopResult.rows.length,
+        data.tradeTop.length + data.jeonseTop.length,
         lastEvidenceDate,
       ),
       _timing: {
-        dong_name_ms: Number(dongNameMs.toFixed(1)),
-        trade_top_ms: Number(tradeTopMs.toFixed(1)),
-        jeonse_top_ms: Number(jeonseTopMs.toFixed(1)),
-        recent_trade_ms: Number(recentTradeMs.toFixed(1)),
-        recent_jeonse_ms: Number(recentJeonseMs.toFixed(1)),
-        distribution_ms: Number(distributionMs.toFixed(1)),
-        db_ms: Number(dbMs.toFixed(1)),
-        eval_ms: Number(evalMs.toFixed(1)),
+        ...data.timing,
+        eval_ms: Number(Math.max(0, evalMs).toFixed(1)),
       },
     },
     {
       headers: {
-        'Server-Timing': `dong_name;dur=${dongNameMs.toFixed(1)}, trade_top;dur=${tradeTopMs.toFixed(1)}, jeonse_top;dur=${jeonseTopMs.toFixed(1)}, recent_trade;dur=${recentTradeMs.toFixed(1)}, recent_jeonse;dur=${recentJeonseMs.toFixed(1)}, distribution;dur=${distributionMs.toFixed(1)}`,
+        'Server-Timing': `dong_name;dur=${data.timing.dong_name_ms}, trade_top;dur=${data.timing.trade_top_ms}, jeonse_top;dur=${data.timing.jeonse_top_ms}, recent_trade;dur=${data.timing.recent_trade_ms}, recent_jeonse;dur=${data.timing.recent_jeonse_ms}, distribution;dur=${data.timing.distribution_ms}`,
       },
     },
   );

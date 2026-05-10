@@ -86,6 +86,19 @@ jobs:
             echo "HEALTHCHECKS_PING_URL not set, skipping success ping"
           fi
 
+      - name: Vercel cache invalidate (mv_dong_stats)
+        if: success()
+        env:
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          REVALIDATE_URL: https://eodigakka.vercel.app/api/revalidate
+        run: |
+          if [ -n "${REVALIDATE_SECRET}" ]; then
+            curl -fsS -m 10 --retry 3 -X POST "${REVALIDATE_URL}?tag=mv_dong_stats" \
+              -H "Authorization: Bearer ${REVALIDATE_SECRET}" || true
+          else
+            echo "REVALIDATE_SECRET not set, skipping cache invalidate"
+          fi
+
       - name: Healthchecks.io fail ping
         if: failure()
         env:

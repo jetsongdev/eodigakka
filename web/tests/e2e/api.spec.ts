@@ -85,6 +85,18 @@ test('GET /api/affordable rejects invalid size', async ({ request }) => {
   expect(response.status()).toBe(400);
 });
 
+test('POST /api/revalidate without auth returns 401', async ({ request }) => {
+  const response = await request.post('/api/revalidate?tag=mv_dong_stats');
+  expect(response.status()).toBe(401);
+});
+
+test('POST /api/revalidate with wrong tag returns 400', async ({ request }) => {
+  const response = await request.post('/api/revalidate', {
+    headers: { Authorization: 'Bearer wrong-secret' },
+  });
+  expect(response.status()).toBe(401);
+});
+
 test('GET /api/dong/:bjd/complexes returns separate trade and jeonse arrays', async ({
   request,
 }) => {

@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
+import { cacheLife, cacheTag } from 'next/cache';
 import { sql } from 'kysely';
 
 import { db } from '../../../lib/db';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-static';
 
 interface PolygonRow {
   bjd_code: string;
@@ -25,7 +23,16 @@ interface GeoJSONFeature {
   geometry: unknown;
 }
 
-export async function GET() {
+interface PolygonsPayload {
+  features: GeoJSONFeature[];
+  timing: { db_ms: number; serialize_ms: number; parse_ms: number };
+}
+
+async function fetchPolygons(): Promise<PolygonsPayload> {
+  'use cache';
+  cacheLife('max');
+  cacheTag('bjd_polygon');
+
   const t0 = performance.now();
   const rows = await sql<PolygonRow>`
     SELECT
@@ -59,22 +66,31 @@ export async function GET() {
   });
   const serializeMs = performance.now() - tSerialize0;
 
+  return {
+    features,
+    timing: {
+      db_ms: Number(dbMs.toFixed(1)),
+      serialize_ms: Number(serializeMs.toFixed(1)),
+      parse_ms: Number(parseMs.toFixed(1)),
+    },
+  };
+}
+
+export async function GET() {
+  const { features, timing } = await fetchPolygons();
+
   return NextResponse.json(
     {
       type: 'FeatureCollection',
       features,
       generated_at: new Date().toISOString(),
       evidence: `법정동 폴리곤 ${features.length}개 (V-World LSMD_ADM_SECT_UMD_11)`,
-      _timing: {
-        db_ms: Number(dbMs.toFixed(1)),
-        serialize_ms: Number(serializeMs.toFixed(1)),
-        parse_ms: Number(parseMs.toFixed(1)),
-      },
+      _timing: timing,
     },
     {
       headers: {
         'Cache-Control': 'public, max-age=86400, s-maxage=86400',
-        'Server-Timing': `db;dur=${dbMs.toFixed(1)}, serialize;dur=${serializeMs.toFixed(1)}, parse;dur=${parseMs.toFixed(1)}`,
+        'Server-Timing': `db;dur=${timing.db_ms}, serialize;dur=${timing.serialize_ms}, parse;dur=${timing.parse_ms}`,
       },
     },
   );
