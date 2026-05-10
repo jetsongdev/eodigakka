@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as Slider from '@radix-ui/react-slider';
 
 import type { AffordableDongResponse, HoverInfo } from '../components/MapView';
+import { RecentTickerBar, type RecentTxItem } from '../components/RecentTickerBar';
 import { parseAffordableQuery } from '../lib/filter';
 import type { QueryMode, SizeBucket } from '../lib/filter';
 
@@ -57,6 +58,12 @@ interface DongDetailsResponse {
   distributions: DongDistribution[];
   generated_at: string;
   evidence: string;
+}
+
+interface RecentResponse {
+  items: RecentTxItem[];
+  generated_at: string;
+  data_freshness: string;
 }
 
 type SizeOption = SizeBucket | 'all';
@@ -182,6 +189,7 @@ function MapPageContent() {
   // mode×size별 전체 동 캐시 — cash 필터는 client에서 적용해 슬라이더 latency 0
   const [allDongs, setAllDongs] = useState<AffordableDongResponse[]>([]);
   const [matched, setMatched] = useState<AffordableDongResponse[]>([]);
+  const [recentItems, setRecentItems] = useState<RecentTxItem[] | null>(null);
   const [dataFreshness, setDataFreshness] = useState<string>('');
   const [query, setQuery] = useState<AffordableQueryState>(() =>
     parseAffordableQueryState(new URLSearchParams(searchParams.toString())),
@@ -260,6 +268,31 @@ function MapPageContent() {
       if (urlSyncTimeoutRef.current !== null) {
         clearTimeout(urlSyncTimeoutRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    fetch('/api/recent', { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`/api/recent HTTP ${res.status}`);
+        return res.json() as Promise<RecentResponse>;
+      })
+      .then((data) => {
+        if (!cancelled) setRecentItems(data.items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        console.warn(err instanceof Error ? err.message : err);
+        setRecentItems([]);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
     };
   }, []);
 
@@ -438,6 +471,7 @@ function MapPageContent() {
         )}
       </div>
 
+      <RecentTickerBar items={recentItems} onSelectBjd={setSelectedBjd} />
       <Footer dataFreshness={affordable?.data_freshness ?? null} />
     </div>
   );

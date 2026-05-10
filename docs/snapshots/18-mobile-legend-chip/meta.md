@@ -1,5 +1,5 @@
 ---
-index: 17
+index: 18
 slug: mobile-legend-chip
 date: 2026-05-11
 phase: "Phase 1 — 모바일 UX 마무리"
@@ -7,7 +7,7 @@ git_sha: de001de
 viewport: 1920x1080 + 390x844
 ---
 
-# 17 — 모바일 범례 floating chip
+# 18 — 모바일 범례 floating chip
 
 모바일에서 접힌 컨트롤 패널 안에 묶여 있던 범례를 지도 좌하단 floating chip으로 분리한 시점. 컨트롤 패널은 한 줄 요약으로 접혀 있고, 범례는 별도 chip을 눌러 compact sheet로 확인한다. 데스크톱은 기존처럼 컨트롤 패널 하단 범례를 유지한다.
 

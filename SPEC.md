@@ -558,11 +558,12 @@ jeonse-buyable-map/
   - 시행착오 기록: `docs/til/2026-05-05-lsmd-shapefile-pitfalls.md`.
 
 ### ADR-012: ETL 윈도우 정책 — 정기 3개월 + 1회성 24개월 풀 재적재 (2026-05-10)
-- **결정**: `etl/fetch_rtms.py`에 `--months N` argparse 옵션 추가(default 3, max 36). 정기 cron은 default 3개월 그대로(신고지연 보정 — RTMS는 신고기한 60일 + 늦은 신고가 흔해 직전 3개월을 매일 재조회해야 backfill 됨). 풀 재적재는 1회성으로 `--months 24` 호출 → raw 테이블에 24개월치 누적.
+- **결정**: `etl/fetch_rtms.py`에 `--months N` argparse 옵션 추가(default 3, max 36). 실패 후 이어받기와 더 과거 backfill을 위해 `--start-month YYYYMM --end-month YYYYMM` 명시 범위도 지원한다. 정기 cron은 default 3개월 그대로(신고지연 보정 — RTMS는 신고기한 60일 + 늦은 신고가 흔해 직전 3개월을 매일 재조회해야 backfill 됨). 풀 재적재는 1회성으로 `--months 24` 호출 → raw 테이블에 24개월치 누적.
 - **근거**: 사이드패널 `/api/dong/[bjd]/recent` 더보기를 풀자(라운드 1·2 = PR #24, v0.10.0) 사용자가 거래를 깊이 보고 싶을 때 raw에 4월 한 달치만 적재돼 "여기까지" 끝 라벨이 빨리 떴다. 신고 지연 분포상 2026-05-10 시점에 3개월 fetch가 사실상 4월에 몰리는 결과. RTMS Dev key 일일 한도 10,000회 (매매·전월세 각각, 2026-05-10 마이페이지 확인) 기준 풀 재적재 호출량 ≈ 14구 × 2종 × 24월 × 평균 5 페이지 ≈ 3,360 호출이라 한 방에 가능.
 - **trade-off**: raw 테이블 크기 증가(현재 ~20K 행 → 풀 재적재 후 ~150K~250K 추정). recent endpoint 응답 시간은 `bjd_code` 인덱스 + LIMIT trick이라 영향 미미. `mv_dong_stats`는 명시적으로 직전 3개월 윈도우(SPEC ADR-005)이라 통계 비교 안정성 유지 — 즉 색칠지도 confidence 분류는 변하지 않고 "최근 거래" 깊이만 늘어남.
 - **영향**:
-  - `etl/fetch_rtms.py` `parse_args(--months)` + `month_tokens(count=args.months)` + 시작 log에 윈도우 명시.
+  - `etl/fetch_rtms.py` `parse_args(--months, --start-month, --end-month)` + `month_tokens(count=args.months)` / `month_range_desc(start, end)` + 시작 log에 윈도우 명시.
+  - RTMS `requests` 계열 일시 오류는 월/구/거래유형 단위로 최대 3회 재시도. `ETL fetch: year_month=... gu_code=... trade_type=...` 로그로 실패 위치 추적.
   - 풀 재적재 1회 명령 (Mr. Song 환경, `etl/.env` 로드):
     ```
     ETL_DISABLED=0 \
@@ -570,9 +571,16 @@ jeonse-buyable-map/
     RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
     .venv-etl/bin/python3 etl/fetch_rtms.py --months 24
     ```
+  - 이어받기/추가 과거 구간 명령:
+    ```
+    ETL_DISABLED=0 \
+    DATABASE_URL=$(grep DATABASE_URL etl/.env | cut -d= -f2-) \
+    RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
+    .venv-etl/bin/python3 etl/fetch_rtms.py --start-month 202405 --end-month 202306
+    ```
   - GHA 정기 cron(`.github/workflows/rtms-etl-daily.yml`)은 인자 없이 호출되니 default 3 그대로 — 풀 재적재 후에도 정기 ETL은 신고지연 보정만 담당.
-  - 검증: `tx_apt_trade` GROUP BY YYYY-MM 분포에 24개 월 모두 존재 + recent endpoint offset 0/100/200 모두 200 + 다중 월 그룹 헤더 노출.
-  - 회귀 테스트: `etl/tests/test_fetch_rtms.py` `MonthTokensTest`(count=24 24개월 cross-year) + `ParseArgsTest`(default·max·범위 외 reject).
+  - 검증: `tx_apt_trade`/`tx_apt_rent` GROUP BY YYYY-MM 분포에 대상 월 모두 존재 + 각 월 `COUNT(DISTINCT sigungu_code)=14` + recent endpoint offset 0/100/200/210 모두 200 + 다중 월 그룹 헤더 노출.
+  - 회귀 테스트: `etl/tests/test_fetch_rtms.py` `MonthTokensTest`(count=24 24개월 cross-year) + `MonthRangeDescTest` + `ParseArgsTest`(default·max·범위 외 reject) + RTMS retry 테스트.
 
 ---
 

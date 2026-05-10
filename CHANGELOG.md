@@ -14,7 +14,7 @@
 
 ### 추가
 - 모바일에서 컨트롤 패널 내부 범례를 숨기고 지도 좌하단 `범례` floating chip으로 분리. chip을 누르면 compact `지도 범례` sheet가 열리고, SidePanel bottom sheet가 열리면 겹침 방지를 위해 chip을 숨김.
-- `docs/snapshots/17-mobile-legend-chip/` — 북아현동 선택 데스크톱 기준 + 모바일 chip 기본/open/selected 상태 시각 기록.
+- `docs/snapshots/18-mobile-legend-chip/` — 북아현동 선택 데스크톱 기준 + 모바일 chip 기본/open/selected 상태 시각 기록.
 
 ### 변경
 - `tasks.md` 모바일 범례 분리 항목 완료 처리.
@@ -23,6 +23,23 @@
 ### 검증
 - `git diff --check`
 - `cd web && ./node_modules/.bin/tsc --noEmit`
+
+---
+
+## [v0.12.0] - 2026-05-11 - 강북 14구 최근 거래 50건 marquee 티커
+
+### 추가
+- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. `use cache: remote`, ETL freshness 문자열, `Server-Timing` 포함.
+- `web/components/RecentTickerBar.tsx` — footer 바로 위에 표시되는 최근 거래 marquee 티커 추가. hover/focus 시 정지, `prefers-reduced-motion`에서는 수동 가로 스크롤로 폴백.
+
+### 변경
+- `web/app/page.tsx` — `/api/recent`를 mount 시 1회 가져와 티커에 연결하고, 항목 클릭은 기존 `selectedBjd` SidePanel 경로로 전달.
+
+### 검증
+- `web/tests/e2e/api.spec.ts` — `/api/recent` 응답 스키마와 50건 제한 회귀 가드 추가.
+- `web/tests/e2e/map.spec.ts` — 티커 노출 및 항목 클릭 → SidePanel 열림 회귀 가드 추가.
+
+---
 
 ## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
 

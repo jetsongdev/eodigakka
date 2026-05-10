@@ -37,6 +37,20 @@ test('폴리곤 카운트 표시가 보인다', async ({ page }) => {
   await expect(page.getByText(/폴리곤\s+467개|폴리곤/, { exact: false })).toBeVisible();
 });
 
+test('최근 거래 티커가 footer 바로 위에 보이고 항목 클릭으로 SidePanel을 연다', async ({
+  page,
+}) => {
+  await openMap(page);
+
+  const ticker = page.getByRole('region', { name: '강북 14구 최근 거래 50건' });
+  await expect(ticker).toBeVisible();
+  await expect(ticker.locator('.recent-ticker-track')).toHaveCount(1);
+
+  await ticker.getByRole('button').first().click();
+
+  await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
+});
+
 test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }) => {
   await openMap(page);
 
