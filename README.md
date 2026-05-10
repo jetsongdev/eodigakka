@@ -52,9 +52,9 @@ bash db/migrate_to_neon.sh
 
 `db/migrate_to_neon.sh`는 `pg_dump --exclude-schema=tiger,topology` + extension 제거 grep + `psql` import + 검증 카운트(`bjd / trade / rent / mv_stats`)까지 자동. 시스템 `psql` 미설치라도 `docker run --rm postgres:16 psql`로 처리.
 
-## 풀 재적재 (24개월 윈도우, 1회성)
+## 풀 재적재 / 이어받기
 
-ADR-012 — 정기 cron은 default 3개월(신고지연 보정)이지만 `--months N`으로 윈도우 확장 가능. 사이드패널 `/api/dong/[bjd]/recent` 더보기에 노출되는 raw가 1년치 이상 필요할 때 1회 실행.
+ADR-012 — 정기 cron은 default 3개월(신고지연 보정)이지만 `--months N` 또는 `--start-month YYYYMM --end-month YYYYMM`으로 윈도우 확장 가능. 사이드패널 `/api/dong/[bjd]/recent` 더보기에 노출되는 raw가 1년치 이상 필요할 때 1회 실행.
 
 ```bash
 # Neon 직결 (운영 환경에 직접 누적). 호출량 ≈ 3,360 (한도 10,000/일).
@@ -64,7 +64,18 @@ RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
 .venv-etl/bin/python3 etl/fetch_rtms.py --months 24
 ```
 
+실패 후 이어받거나 더 과거 구간을 12개월 단위로 추가할 때는 명시 범위를 사용한다.
+
+```bash
+ETL_DISABLED=0 \
+DATABASE_URL=$(grep DATABASE_URL etl/.env | cut -d= -f2-) \
+RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
+.venv-etl/bin/python3 etl/fetch_rtms.py --start-month 202405 --end-month 202306
+```
+
 raw 테이블 `ON CONFLICT DO NOTHING` 누적이라 기존 데이터 안전. 정기 cron(`.github/workflows/rtms-etl-daily.yml`)은 인자 없이 호출되니 그대로 default 3 — 풀 재적재 후에도 정기 ETL은 신고지연 보정만 담당. `mv_dong_stats`/`mv_jeonse_ratio`는 명시적으로 직전 3개월 윈도우(ADR-005)라 색칠지도 confidence 분류는 변하지 않고 "최근 거래" 깊이만 늘어남.
+
+RTMS 응답이 중간에 끊기는 일시 오류는 월/구/거래유형 단위로 최대 3회 재시도한다. 로그의 `ETL fetch: year_month=... gu_code=... trade_type=...`가 마지막 성공/실패 위치를 가리킨다.
 
 검증:
 ```bash

@@ -90,7 +90,8 @@ RTMS API ─→ ETL (Python) ─→ Postgres+PostGIS ─→ Next.js API ─→ P
 ### 1. ETL (`etl/fetch_rtms.py`)
 
 - **호출**: `PublicDataReader.TransactionPrice(api_key)` → RTMS Dev 엔드포인트 (운영 키 미승인, ADR-007)
-- **스코프**: `GANGBUK_14` 강북 14구 × 최근 3개월 (`month_tokens`) × 매매·전월세
+- **스코프**: `GANGBUK_14` 강북 14구 × 최근 3개월 (`month_tokens`) × 매매·전월세. 수동 backfill은 `--months N` 또는 `--start-month YYYYMM --end-month YYYYMM` 명시 범위로 실행
+- **일시 오류 대응**: RTMS `requests` 계열 오류는 월/구/거래유형 단위 최대 3회 재시도. 실패 위치는 `ETL fetch: year_month=... gu_code=... trade_type=...` 로그로 확인
 - **bjd_code 보정**: `apply_bjd_fallback` — `법정동시군구코드+법정동읍면동코드` 결합 → 실패 시 `(시군구, 동이름)` lookup으로 `bjd_polygon`에서 가져옴
 - **취소 거래 필터**: `filter_cancelled` — `해제여부 == "O"`인 행만 제외 (TIL `rtms-haeje-filter`)
 - **재실행 안전**: `INSERT … ON CONFLICT DO NOTHING` (raw 테이블의 unique key가 중복 제거)
