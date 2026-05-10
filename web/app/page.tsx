@@ -1471,10 +1471,27 @@ const MODE_ACCENT: Record<QueryMode, string> = {
 
 const RECENT_INITIAL_COUNT = 10;
 const RECENT_PAGE_SIZE = 20;
+// 누적 30건 넘어가면 자체 스크롤 — 그룹 sticky 컨텍스트 + 사이드패널 전체 스크롤 분리
+const RECENT_SCROLL_MAX_PX = 320;
+const RECENT_GRID_COLUMNS = '1fr auto 36px';
 
 interface RecentMoreResponse {
   rows: RecentTransaction[];
   has_more: boolean;
+}
+
+function groupByMonth(
+  rows: RecentTransaction[],
+): Array<{ ym: string; rows: RecentTransaction[] }> {
+  const map = new Map<string, RecentTransaction[]>();
+  for (const r of rows) {
+    const ym = r.contract_date.slice(0, 7); // "YYYY-MM"
+    const bucket = map.get(ym);
+    if (bucket) bucket.push(r);
+    else map.set(ym, [r]);
+  }
+  // contract_date DESC 보장 (서버 정렬) → Map 삽입 순서가 최신 월 우선
+  return Array.from(map.entries()).map(([ym, rows]) => ({ ym, rows }));
 }
 
 function RecentTxSections({
@@ -1623,31 +1640,76 @@ function RecentTxSections({
               <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
             ) : (
               <>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
-                      <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-                      <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-                      <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {section.rows.map((tx, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                        <td style={{ padding: '4px 2px' }}>
-                          {tx.complex_name}
-                          <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                        </td>
-                        <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                          {(tx.amount_man / 10000).toFixed(1)}억
-                        </td>
-                        <td style={{ padding: '4px 2px', color: '#888' }}>
-                          {tx.contract_date.slice(5)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div
+                  role="row"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: RECENT_GRID_COLUMNS,
+                    gap: 6,
+                    padding: '4px 2px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderBottom: '1px solid #e8e8e8',
+                  }}
+                >
+                  <span>단지·평형</span>
+                  <span style={{ textAlign: 'right' }}>금액</span>
+                  <span>일자</span>
+                </div>
+                <div
+                  style={{
+                    maxHeight: RECENT_SCROLL_MAX_PX,
+                    overflowY: 'auto',
+                    // sticky 컨텍스트 = 이 박스. 그룹 헤더가 박스 상단에 고정.
+                  }}
+                >
+                  {groupByMonth(section.rows).map((g) => (
+                    <div key={g.ym}>
+                      <div
+                        role="rowheader"
+                        style={{
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 1,
+                          background: 'rgba(248,248,248,0.96)',
+                          backdropFilter: 'blur(2px)',
+                          WebkitBackdropFilter: 'blur(2px)',
+                          padding: '3px 4px',
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: '#666',
+                          letterSpacing: 0.2,
+                          borderBottom: '1px solid #e8e8e8',
+                        }}
+                      >
+                        {g.ym} · {g.rows.length}건
+                      </div>
+                      {g.rows.map((tx, i) => (
+                        <div
+                          key={`${g.ym}-${i}`}
+                          role="row"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: RECENT_GRID_COLUMNS,
+                            gap: 6,
+                            padding: '4px 2px',
+                            fontSize: 11,
+                            borderBottom: '1px solid rgba(0,0,0,0.04)',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tx.complex_name}
+                            <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                          </span>
+                          <span style={{ textAlign: 'right' }}>
+                            {(tx.amount_man / 10000).toFixed(1)}억
+                          </span>
+                          <span style={{ color: '#888' }}>{tx.contract_date.slice(5)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
                 {section.error && (
                   <div style={{ marginTop: 6, color: '#c0392b', fontSize: 11 }}>
                     더보기 실패: {section.error}

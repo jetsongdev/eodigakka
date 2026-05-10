@@ -10,13 +10,14 @@
 
 ---
 
-## [v0.10.0] - 2026-05-10 - 사이드패널 최근 거래 더보기 (인라인 점진 로드)
+## [Unreleased] - 사이드패널 최근 거래 더보기 (인라인 점진 로드 + 월별 그룹 + 자체 스크롤)
 
-동 상세 사이드패널의 매매·전세 최근 거래가 각각 10건 고정이었던 걸 +20건씩 누적 로드되도록 풀었다. 사용자가 거래 흐름을 더 깊이 보고 싶을 때 모달이나 페이지 이동 없이 같은 자리에서 펼친다.
+동 상세 사이드패널의 매매·전세 최근 거래가 각각 10건 고정이었던 걸 +20건씩 누적 로드되도록 풀었다. 사용자가 거래 흐름을 더 깊이 보고 싶을 때 모달이나 페이지 이동 없이 같은 자리에서 펼친다. 누적 시 스크롤 감당이 길어지는 문제는 월별 그룹 헤더(sticky) + 매매·전세 각 섹션 자체 스크롤 컨테이너(max 320px)로 해결.
 
 ### 추가
 - `web/app/api/dong/[bjd]/recent/route.ts` — 매매/전세 최근 거래 페이징 전용 엔드포인트. 쿼리: `mode=trade|jeonse` (필수), `offset` (0..200), `limit` (1..50). LIMIT+1 trick으로 `has_more` 추론, 별도 COUNT 쿼리 없음. `'use cache'` + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats', 'recent-{bjd}-{mode}-{offset}-{limit}')` — ETL revalidate webhook이 `mv_dong_stats` 태그 invalidate 시 같이 무효화됨. 정렬은 `contract_date DESC, complex_name ASC, area_m2 ASC` (deterministic tie-break).
 - `web/app/page.tsx` `RecentTxSections` — bjd 변경 시 누적·에러 reset, 매매·전세 각각 독립 더보기 버튼·로딩·에러 상태. 라벨은 `매매 최근 거래 N건+`(has_more 시 `+` 표기), 빈 거래는 기존대로 "최근 거래 없음".
+- `web/app/page.tsx` `groupByMonth` 헬퍼 + 행 렌더링 — `<table>` → `<div>` grid 구조 재작성. 월별(YYYY-MM) 그룹 헤더가 매매·전세 각 섹션 자체 스크롤 박스(max-height 320px) 안에서 `position: sticky; top: 0`. 누적이 50건·100건이 돼도 사이드패널 다른 섹션(EvidenceCard·DistributionChart·TOP5)을 가리지 않고, 스크롤 중에도 현재 보고 있는 월이 항상 박스 상단에 노출.
 - `web/tests/e2e/api.spec.ts` — `/recent` 페이징 smoke 테스트(첫 페이지 has_more, 다음 페이지 offset=10) + 입력 validation 테스트(잘못된 mode·bjd·limit·offset → 400) 추가.
 
 ### 결정
@@ -24,6 +25,8 @@
 - **LIMIT+1 trick**: `COUNT(*)` 추가 쿼리 없이 다음 페이지 존재 여부만 정확히 확인. 총 건수 표기는 현재 UX에서 불필요(범위 가드 `MAX_OFFSET=200`로 충분히 커버).
 - **MAX_OFFSET 200, MAX_LIMIT 50**: 강북 14구 한 동 3개월 거래수 기준 250건 이상 적재된 동이 거의 없음. 악의적 깊은 페이징·DoS 가드.
 - **cache key에 limit/offset 포함**: `recent-{bjd}-{mode}-{offset}-{limit}` 태그는 invalidate 시 와일드카드 매칭이 아니라 정확 매칭이지만, `mv_dong_stats` 태그를 함께 부여해 ETL→/api/revalidate 훅이 한 번에 모두 쓸어내게 함.
+- **자체 스크롤 컨테이너 vs 사이드패널 전체 스크롤**: 매매·전세 각 섹션에 `max-height: 320px; overflow-y: auto`로 자체 스크롤 분리. 사이드패널 전체 스크롤은 살아있어 다른 섹션(TOP5·distribution) 접근 가능. nested scroll의 모바일 어색함은 `RECENT_SCROLL_MAX_PX=320`이라 손가락 한 번 스와이프 안에 들어와 실측상 무리 없음. 대안(전체 사이드패널 스크롤만)은 누적 100건+에서 EvidenceCard가 시야 위로 사라져 "지금 보는 동이 어디였더라" 컨텍스트 분실.
+- **`<table>` → `<div>` grid**: `position: sticky`가 table 행 단위에선 브라우저별 동작이 들쭉날쭉(spec gray area). 시각은 grid `1fr auto 36px`로 동일하게 맞추고 sticky 신뢰성 확보. column header(`단지·평형 / 금액 / 일자`)는 스크롤 박스 밖에 둬서 항상 노출.
 
 ### 검증
 - `npx tsc --noEmit` 통과 (exit 0).
