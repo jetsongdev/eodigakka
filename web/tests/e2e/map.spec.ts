@@ -117,6 +117,21 @@ test('.mapboxgl-canvas 요소가 렌더링된다', async ({ page }) => {
   await expect(page.locator('.mapboxgl-canvas')).toHaveCount(1);
 });
 
+test('모바일 — 접힌 컨트롤 밖에서 범례 chip을 열 수 있다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openMap(page);
+
+  const legendButton = page.getByRole('button', { name: '범례 열기' });
+  await expect(legendButton).toBeVisible();
+
+  await legendButton.click();
+
+  const legendDialog = page.getByRole('dialog', { name: '지도 범례' });
+  await expect(legendDialog).toBeVisible();
+  await expect(legendDialog.getByText('조건 통과 (high)')).toBeVisible();
+  await expect(legendDialog.getByText('미통과/표본 부족')).toBeVisible();
+});
+
 // SidePanel은 폴리곤 클릭으로만 열린다. Playwright native mouse는 synthetic
 // MouseEvent보다 안정적으로 mapbox 이벤트 시스템에 도달한다. 좌표는 폴리곤이
 // 등록된 캔버스 내부 비율(강북구 영역 우상단 짙은 녹색 클러스터).
