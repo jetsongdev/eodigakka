@@ -3,7 +3,7 @@ index: 22
 slug: map-page-structure-refactor
 date: 2026-05-11
 phase: "Code health — route/client 구조 리팩터링"
-git_sha: 3d70a8a (pre-refactor parent)
+git_sha: 514e626
 viewport: 1920x1080 + 390x844
 ---
 
