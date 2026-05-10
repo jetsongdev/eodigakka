@@ -10,6 +10,28 @@
 
 ---
 
+## [Unreleased] - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
+
+Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.
+
+원인: Vercel Next.js 16 공식 문서상 `'use cache'`(default profile)는 **in-memory only, ephemeral per instance**. Vercel serverless instance가 invocation마다 다를 수 있어 캐시 매번 miss. `'use cache: remote'`라야 Vercel Runtime Cache(persistent regional KV)에 저장돼 invocation/instance 간 공유.
+
+폴리곤이 작동했던 이유 — `Cache-Control: public, max-age=86400` 응답 헤더로 **CDN 캐시**가 따로 작동 (`x-vercel-cache: HIT`). `'use cache'` directive와 무관한 별개 layer.
+
+### 수정
+- `web/app/api/affordable/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/dong/[bjd]/complexes/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/revalidate/route.ts` — `revalidateTag(tag, 'default')` → `revalidateTag(tag, { expire: 0 })` (webhook 외부 트리거는 즉시 만료가 권장 패턴)
+
+### 추가
+- `docs/til/2026-05-10-vercel-use-cache-vs-remote.md` — `'use cache'` vs `'use cache: remote'` Vercel serverless 함정
+
+### 결정
+- 폴리곤은 `'use cache'` 그대로 유지 — `Cache-Control: public, max-age=86400` 헤더로 CDN 캐시가 작동 중이라 변경 불필요
+- `{ expire: 0 }` 선택 이유 — ETL 03:00 webhook이 즉시 invalidate해야 다음 사용자가 새 데이터 받음. `'default'`(stale-while-revalidate)면 03:01 첫 사용자가 stale 받음
+
+---
+
 ## [v0.8.4] - 2026-05-10 - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
 
 Stage 2a(v0.8.3)로 freshness 쿼리는 fresh=220ms로 직격됐지만 Production cold에선 stats(`mv_dong_stats` JOIN) 쿼리가 새 dominant이 됨(cold 446ms~1711ms). Stage 2b는 응답 자체를 edge cache에 박는 마지막 한 방.

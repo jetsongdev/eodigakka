@@ -49,7 +49,7 @@ interface ComplexesData {
 }
 
 async function fetchComplexesData(bjd: string): Promise<ComplexesData> {
-  'use cache';
+  'use cache: remote';
   cacheLife({ revalidate: 3600 });
   cacheTag('mv_dong_stats', `complexes-${bjd}`);
 

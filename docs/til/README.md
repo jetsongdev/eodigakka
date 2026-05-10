@@ -6,6 +6,13 @@ eodigakka 프로젝트 진행하며 마주친 시행착오·해결 기록.
 
 ---
 
+## 2026-05-10 (Stage 2 latency)
+
+### Frontend / Vercel
+- [`'use cache'` vs `'use cache: remote'` — Vercel serverless에서 in-memory profile은 ephemeral](2026-05-10-vercel-use-cache-vs-remote.md)
+
+---
+
 ## 2026-05-05 (Phase 1 — 법정동 마이그레이션 + 클라우드 이전)
 
 ### DB
