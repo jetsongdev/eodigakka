@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - perf(web): /api/affordable freshness 쿼리 etl_job_status 컬럼화 (Stage 2-A)
+## [v0.8.3] - 2026-05-10 - perf(web): /api/affordable freshness 쿼리 etl_job_status 컬럼화 (Stage 2-A)
 
 Stage 1(PR #17, v0.8.2) prod 측정 결과 `/api/affordable` `_timing`에서 `fresh_ms=1604.5` 확인. raw 테이블의 `MAX(contract_date)` 풀스캔이 dominant cost 중 절반 이상. Stage 1 진단(EXPLAIN ANALYZE Seq Scan)에서 결정한 옵션 (b) `etl_job_status` 컬럼화로 우회. cache layer는 별개 PR로 분리(advisor 검토 — `'use cache'` directive는 `force-dynamic`·`cookies/headers` 접근·`Server-Timing` observability 등 mechanical constraint가 커서 freshness 우회와 묶지 않음).
 
