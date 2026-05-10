@@ -27,3 +27,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 17 | [footer 위 강북 14구 최근 거래 ticker](17-recent-tx-ticker/) | 2026-05-10 | c3bca44 | 1 (market freshness ticker) |
 | 18 | [모바일 범례 floating chip](18-mobile-legend-chip/) | 2026-05-11 | de001de | 1 (mobile UX 마무리) |
 | 19 | [최근 거래 티커 라벨](19-recent-ticker-label/) | 2026-05-11 | f90d49a | 1 (market freshness ticker) |
+| 20 | [최초 방문 핵심 기능 힌트 + 버전 변경 안내](20-whats-new-first-visit-hint/) | 2026-05-11 | 7f1ec37 | 1.5 (최초 방문/버전 변경 안내) |
