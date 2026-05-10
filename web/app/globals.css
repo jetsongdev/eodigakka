@@ -36,12 +36,35 @@ html, body {
 }
 
 .recent-ticker-bar {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
   height: 36px;
   overflow: hidden;
   background: #fff;
   border-top: 1px solid #e8e8e8;
   touch-action: pan-x;
+}
+
+.recent-ticker-label {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-right: 1px solid #ececec;
+  color: #555;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #fbfbfb;
+}
+
+.recent-ticker-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .recent-ticker-track {
@@ -108,6 +131,11 @@ html, body {
     height: 28px;
   }
 
+  .recent-ticker-label {
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
   .recent-ticker-button {
     gap: 6px;
     font-size: 11px;
@@ -121,7 +149,7 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .recent-ticker-bar {
+  .recent-ticker-viewport {
     overflow-x: auto;
   }
 

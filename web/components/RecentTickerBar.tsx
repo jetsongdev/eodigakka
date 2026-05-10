@@ -80,35 +80,38 @@ export function RecentTickerBar({
       aria-label="강북 14구 최근 거래 50건"
       className="recent-ticker-bar"
     >
-      <ul className="recent-ticker-track">
-        {repeated.map((item, index) => (
-          <li
-            key={`${item.mode}-${item.bjd_code}-${item.contract_date}-${item.complex_name}-${index}`}
-            className="recent-ticker-item"
-            aria-hidden={index >= items.length}
-          >
-            <button
-              type="button"
-              className="recent-ticker-button"
-              aria-label={buildAriaLabel(item)}
-              tabIndex={index >= items.length ? -1 : 0}
-              onClick={() => onSelectBjd(item.bjd_code)}
+      <span className="recent-ticker-label">최근 거래 정보</span>
+      <div className="recent-ticker-viewport">
+        <ul className="recent-ticker-track">
+          {repeated.map((item, index) => (
+            <li
+              key={`${item.mode}-${item.bjd_code}-${item.contract_date}-${item.complex_name}-${index}`}
+              className="recent-ticker-item"
+              aria-hidden={index >= items.length}
             >
-              <span
-                className="recent-ticker-mode"
-                style={{ background: MODE_ACCENT[item.mode] }}
+              <button
+                type="button"
+                className="recent-ticker-button"
+                aria-label={buildAriaLabel(item)}
+                tabIndex={index >= items.length ? -1 : 0}
+                onClick={() => onSelectBjd(item.bjd_code)}
               >
-                {MODE_LABEL[item.mode]}
-              </span>
-              <span>{formatShortDate(item.contract_date)}</span>
-              <span>{formatLocation(item.sigungu, item.dong)}</span>
-              <span>
-                {item.complex_name} {formatArea(item.area_m2)} {formatMan(item.amount_man)}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+                <span
+                  className="recent-ticker-mode"
+                  style={{ background: MODE_ACCENT[item.mode] }}
+                >
+                  {MODE_LABEL[item.mode]}
+                </span>
+                <span>{formatShortDate(item.contract_date)}</span>
+                <span>{formatLocation(item.sigungu, item.dong)}</span>
+                <span>
+                  {item.complex_name} {formatArea(item.area_m2)} {formatMan(item.amount_man)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
