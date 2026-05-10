@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - perf(web): /api/affordable freshness 쿼리 우회 — etl_job_status 컬럼화 (Stage 2a)
+## [v0.8.3] - 2026-05-10 - perf(web): /api/affordable freshness 쿼리 우회 — etl_job_status 컬럼화 (Stage 2a)
 
 Stage 1(v0.8.2) Production 측정에서 `/api/polygons` cold 10.53s → 29ms는 직격됐지만 `/api/affordable` cold 3.46s 중 fresh=1572ms 부분은 그대로. Stage 2a는 D 옵션(b) 적용 — `MAX(contract_date) FROM tx_apt_trade/rent` raw 풀스캔을 `etl_job_status` 1행 SELECT로 우회. ETL이 03:00 갱신 끝나고 max_contract_date를 status 테이블에 기록하면 API는 그 값만 읽음.
 
