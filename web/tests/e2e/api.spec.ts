@@ -57,6 +57,10 @@ test('GET /api/affordable trade returns matching dongs', async ({ request }) => 
   expect(body.dongs.length).toBeGreaterThanOrEqual(1);
   expect(body.evidence).toContain('조건 일치');
   expect(response.headers()['server-timing']).toMatch(/stats;dur=\d.*db;dur=\d/);
+  // freshness 쿼리 우회 효과: fresh_ms가 raw 풀스캔(prod 1572ms) 대신 etl_job_status 1행 SELECT라 ms 단위
+  expect(body._timing.fresh_ms).toBeLessThan(200);
+  // data_freshness 포맷 회귀 가드 — last_contract_date NULL일 때도 graceful 메시지
+  expect(body.data_freshness).toMatch(/RTMS \d{4}-\d{2}-\d{2} 신고분까지|RTMS 신고분 없음/);
 });
 
 test('GET /api/affordable jeonse returns dongs with color when present', async ({ request }) => {
