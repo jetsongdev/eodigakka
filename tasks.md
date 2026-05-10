@@ -114,7 +114,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - **Mapbox eodigakka-prod**: 커스텀 도메인 연결 시 Mapbox 콘솔 URL restriction에 새 도메인 화이트리스트 추가 필수.
 - [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
 - [x] 면책 고지 + 데이터 출처가 SEO/소셜 카드에 노출 (2026-05-05) — `app/layout.tsx`에 `description` + `openGraph` + `twitter` metadata 추가 (PR #2)
-- [-] **Preview deployment protection** (2026-05-10 옵션 C 채택, 취소) — 분석 결과 옵션 A(Vercel Auth 끄기)는 Mapbox preview 토큰 abuse 위험. Preview 토큰은 unrestricted(default)인데 Mapbox URL restriction wildcard 미지원이라 `*.vercel.app` 화이트리스트 불가. Preview URL 공개 시 DevTools에서 토큰 수확 → 다른 도메인에서 quota 소진·청구 가능. 옵션 B는 OG crawler가 임의 header 첨부 불가라 사실상 GHA 자동화 외엔 의미 없음. 결론: 옵션 C(그대로 두고 Production에서만 OG 검증) — 외부 공유 가치 적은 현 단계에 충분. 외부 공유 시점 임박할 때 재평가.
+- [x] **Preview deployment protection** (2026-05-10 옵션 C 채택 + 옵션 D 추가) — Auth 유지(옵션 C, 외부 공유 가치 적은 현 단계 충분)하면서 자동화 검증은 **Protection Bypass for Automation 토큰**(옵션 D)으로 우회. 1Password vault `side-project / eodigakka / vercel-bypass`에 발급 + GH Secret `VERCEL_AUTOMATION_BYPASS` 동기화 완료. 옵션 A(Auth 끄기)는 Mapbox preview 토큰 abuse 위험으로 여전히 취소(URL restriction wildcard 미지원, Preview URL 공개 시 DevTools에서 토큰 수확 → 다른 도메인에서 quota 소진 위험). Preview에서 curl·Playwright·Lighthouse 등 모든 자동화 검증 가능 — 사용법은 CLAUDE.md 「검증 체크리스트」 섹션. 외부 공유 시점 임박할 때 옵션 A 재평가는 별개.
 
 ### G. 사용자 피드백 채널 (2026-05-05 신규)
 
