@@ -10,20 +10,21 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (2026-05-09 갱신, Production latency 측정 직후)**:
+**현재 우선순위 추천 (2026-05-10 갱신, Stage 1 PR 작성 직후)**:
 
-🚨 **최우선 — Production 로딩 latency 심각** (2026-05-09 두 차례 측정):
+🚨 **최우선 — Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1 진행):
 
 | API | Cold | Warm | Note |
 |---|---|---|---|
-| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | ~900ms | Neon 콜드 + Vercel 함수 콜드 |
-| `/api/polygons` | **10.53s · 1142kB** | 170ms | first cold가 압도적, 이후 cache hit 동작 중 |
-| `/api/dong/[bjd]/complexes` | (미측정) | **2.13s · 1.2kB** | warm에서도 무거움 — 사이드패널 클릭 UX 직격. 응답 작은데 처리 큼 |
+| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | ~900ms | Neon 콜드 + Vercel 함수 콜드. Stage 2 대상 |
+| `/api/polygons` | **10.53s · 1142kB** | 170ms | Stage 1에서 force-static + simplify로 직격 — deploy 후 측정 필요 |
+| `/api/dong/[bjd]/complexes` | (미측정) | **2.13s · 1.2kB** | Stage 1에서 6 sub-query Server-Timing 박음 — deploy 후 dominant 확정 |
 
-1. 🔴 **H + I + J 묶음 별도 PR** (PR #16 merge 직후 진행) — H의 D(affordable edge cache) + E(인덱스) + I 전체(polygons CDN cache + precision 축소) + J 신규(complexes 진단·인덱스·cache). 임장 검증·외부 공유 전 필수 통과
-2. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — H+I+J 처리 후 재진입
-3. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
-4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — H+I+J로 latency 정상화 후 진행 의미 있음
+1. 🔴 **Stage 1 PR (진행 중, 본 워크트리)** — polygons force-static + simplify(precision 5) + complexes/polygons Server-Timing 측정 도구. 저위험·고가치 단독 ship해 baseline 확보
+2. 🔴 **Stage 2 PR (다음)** — affordable edge cache(`'use cache'` + cacheTag/updateTag) + complexes per-bjd cache + freshness 쿼리 우회 (EXPLAIN으로 Seq Scan 확정 → 단일 contract_date 인덱스 또는 etl_job_status 컬럼화). ETL workflow에 Vercel deploy hook curl POST 추가해 03:00 갱신 후 cache invalidate. 임장 검증·외부 공유 전 필수 통과
+3. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — Stage 2 처리 후 재진입
+4. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+5. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — Stage 2로 latency 정상화 후 진행 의미 있음
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -163,7 +164,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] **B. Promise.all 병렬화** (PR #16, 2026-05-09) — 두 쿼리(`mv_dong_stats` JOIN + `MAX(contract_date)`)를 `Promise.all`로 묶음. Production 첫 호출 측정 `stats=1788.8 fresh=1572.4 db=1788.8(=max) eval=1.3` — 병렬 작동 입증, sequential이었으면 db≈3361. **fresh 흡수로 ~1.57s 절감**
 - [x] **G 부분 — Server-Timing 헤더 + body `_timing` fallback** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. Vercel runtime이 헤더 strip하는 케이스 대비 응답 body에도 `_timing` 박음. DevTools Network → Preview/Response 탭에서 즉시 노출. e2e 회귀 가드 추가
 - [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
-- [ ] **D + E 적용** (별도 PR 예정) — D는 모든 호출 ~50ms 응답, E는 warm 700ms 베이스라인 단축. I 섹션 polygons와 묶음 PR로 진행
+- [x] **E 진단 완료** (2026-05-10, Stage 1) — `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade` **Seq Scan** 확정 (local Docker 5456 rows, 3ms). 기존 `(bjd_code, contract_date)` 복합 인덱스의 leading column이 `bjd_code`라 `MAX` 단독엔 활용 안 됨 (advisor 가설 정확). Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정 — (b)가 raw 인덱스 추가 없이 1행 SELECT라 더 깔끔
+- [ ] **D + C 적용 (Stage 2 PR)** — D는 모든 호출 ~50ms 응답(`'use cache'` directive + `cacheTag('mv_dong_stats')` + ETL workflow에서 Vercel deploy hook curl POST로 invalidate), C는 freshness 쿼리 우회 (위 E 결정 따라). Stage 1 prod 측정 후 진행
 
 ### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 
@@ -191,6 +193,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 **진척**:
 - [~] **추가 측정** (2026-05-09 2차 캡처) — Production warm 상태 polygons **170ms** 확인. 즉 `force-dynamic`이어도 Vercel CDN/브라우저 캐시가 일부 동작 중(응답 헤더 `Cache-Control: public, max-age=86400`이 클라 캐시 트리거). 다만 first cold 10.53s는 그대로 부담 — A(force-static) 적용 시 cold도 build artifact로 박혀 0번째 사용자도 즉시. F(빌드 시점 정적 파일)는 backup으로.
+- [x] **A + B + C + E (Stage 1 PR)** (2026-05-10) — `dynamic = 'force-static'` 적용. SQL `ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.00005), 5)`로 precision 5(≈1.1m) + Douglas-Peucker tolerance 5m 동시 적용. dev 응답 1142kB → ~612kB 측정(약 46% 감소, brotli 후 wire 비용도 그만큼). Server-Timing 3 metric(`db / serialize / parse`) + body `_timing` 박음. force-static이라 평소엔 build 시점 값 박혀 캐시 만료 후 재생성에만 새 값 — 측정 도구로는 충분. Production deploy 후 cold 10.53s → ms 직격 검증 예정. e2e 가드: features 467개 유지(simplify로 폴리곤 안 깨졌는지) + `_timing` 3 키 + Server-Timing `db;dur=` 매치
+- [ ] **D, F, G** — A로 cold 잡히면 후순위. 필요 시 후속 PR
 
 ### J. `/api/dong/[bjd]/complexes` 사이드패널 latency 개선 (2026-05-09 신규)
 
@@ -212,6 +216,10 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 4. C·F — A 결과 보고 결정
 
 **트리거**: Mr. Song이 Production Network 탭에서 complexes **2.13s · 1.2kB** 측정(2026-05-09 2차 캡처). 사이드패널 UX 직격. H+I 묶음 PR에 J 섹션도 같이 포함.
+
+**진척**:
+- [x] **A. Server-Timing 적용 (Stage 1 PR)** (2026-05-10) — 6개 sub-query(`dong_name`, `trade_top`, `jeonse_top`, `recent_trade`, `recent_jeonse`, `distribution`) 각각 분리 측정. `Promise.all` `.then()` 패턴으로 wall-clock 시점 기록. 응답 헤더 6 metric + body `_timing: { dong_name_ms, trade_top_ms, jeonse_top_ms, recent_trade_ms, recent_jeonse_ms, distribution_ms, db_ms (=max), eval_ms }`. dev 첫 호출에서 `jeonse_top=60.7, recent_trade=58.9` dominant 관찰 (local Docker라 prod와 다를 수 있음). Production deploy 후 warm 2.13s의 진짜 dominant 확정 → Stage 2 우선순위 결정. e2e 회귀 가드 추가
+- [ ] **B / E / C / F (Stage 2 PR)** — Stage 1 prod 측정 결과 보고 결정. B(인덱스 추가)는 EXPLAIN 결과 따라, E(cache)는 H-D와 동일 패턴(`'use cache'` + cacheTag), F(MV 신설)는 C(TOP5 PERCENTILE_CONT) dominant일 때만
 
 ---
 

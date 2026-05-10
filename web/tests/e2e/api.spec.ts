@@ -37,6 +37,10 @@ test('GET /api/polygons returns 467 Seoul polygons', async ({ request }) => {
   expect(body.type).toBe('FeatureCollection');
   expect(Array.isArray(body.features)).toBe(true);
   expect(body.features).toHaveLength(467);
+  expect(response.headers()['server-timing']).toMatch(/db;dur=/);
+  expect(body._timing).toHaveProperty('db_ms');
+  expect(body._timing).toHaveProperty('serialize_ms');
+  expect(body._timing).toHaveProperty('parse_ms');
   expect(body.features[0]?.properties?.bjd_code).toMatch(/^\d{10}$/);
 });
 
@@ -93,6 +97,19 @@ test('GET /api/dong/:bjd/complexes returns separate trade and jeonse arrays', as
   expect(response.status()).toBe(200);
 
   const body = await response.json();
+  const serverTiming = response.headers()['server-timing'];
+  expect(serverTiming).toContain('dong_name;dur=');
+  expect(serverTiming).toContain('trade_top;dur=');
+  expect(serverTiming).toContain('jeonse_top;dur=');
+  expect(serverTiming).toContain('recent_trade;dur=');
+  expect(serverTiming).toContain('recent_jeonse;dur=');
+  expect(serverTiming).toContain('distribution;dur=');
+  expect(body._timing).toHaveProperty('dong_name_ms');
+  expect(body._timing).toHaveProperty('trade_top_ms');
+  expect(body._timing).toHaveProperty('jeonse_top_ms');
+  expect(body._timing).toHaveProperty('recent_trade_ms');
+  expect(body._timing).toHaveProperty('recent_jeonse_ms');
+  expect(body._timing).toHaveProperty('distribution_ms');
   expect(body).toHaveProperty('recent_trades');
   expect(body).toHaveProperty('recent_jeonse');
   expect(Array.isArray(body.recent_trades)).toBe(true);

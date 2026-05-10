@@ -10,6 +10,24 @@
 
 ---
 
+## [v0.8.2] - 2026-05-10 - perf(web): /api/polygons 정적화 + complexes Server-Timing 측정 도구 (Stage 1)
+
+Production cold latency 진단 후 H+I+J 묶음 PR을 두 단계로 분할. 이번이 **Stage 1**: 측정 도구 + polygons 정적화. cache layer는 Stage 2.
+
+### 변경
+- `web/app/api/polygons/route.ts` — `dynamic = 'force-dynamic'` → `force-static`. Vercel build 시점에 467개 폴리곤 GeoJSON을 prerender해 build artifact에 박음. CDN edge에서 0번째 사용자도 즉시 응답 → Production cold **10.53s → ms** 직격. ETL이 폴리곤 안 건드리고 V-World LSMD 갱신 시(분기 단위)에만 재배포 필요해 정적화가 자연스러움
+- `web/app/api/polygons/route.ts` — SQL을 `ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.00005), 5)`로 변경. precision 6 → 5(≈1.1m, zoom 11 시각엔 차이 안 보임) + Douglas-Peucker tolerance 5m simplify. dev 서버 응답 1142kB → ~612kB 측정(약 46% 감소). brotli 압축 후 wire 비용도 그만큼 줄어듦
+
+### 추가
+- `web/app/api/polygons/route.ts` Server-Timing — `db;dur / serialize;dur / parse;dur` 3 metric + 응답 body `_timing: { db_ms, serialize_ms, parse_ms }`. force-static이라 평소엔 build 시점 값이 박혀 캐시 만료 후 재생성 시점에만 새 값. dev 서버 측정: `db=226.2, serialize=2.6, parse=2.6` — 467개 `JSON.parse`는 dominant 아님 확정
+- `web/app/api/dong/[bjd]/complexes/route.ts` Server-Timing — 6개 sub-query(`dong_name`, `trade_top`, `jeonse_top`, `recent_trade`, `recent_jeonse`, `distribution`) 각각 분리 측정 + body `_timing` 객체. dev 첫 호출 cold에서 `jeonse_top=60.7, recent_trade=58.9` dominant 관찰. Production warm 2.13s의 진짜 dominant은 deploy 후 측정으로 확정 → Stage 2 인덱스/캐시 우선순위 결정
+- `web/tests/e2e/api.spec.ts` — polygons body `_timing` 3 키 + Server-Timing 매치 회귀 가드, complexes body `_timing` 6 키 + Server-Timing 6개 metric 매치 회귀 가드
+
+### 결정
+- **Stage 1/Stage 2 분할** — advisor 검토 후. Stage 1은 저위험·고가치(측정 도구 + 정적 캐시)라 단독 ship해 baseline 확보. Stage 2는 affordable/complexes cache layer + freshness 쿼리 우회 — invalidate 실수 시 stale UX 위험 있어 Stage 1 prod 측정 후 진행. tasks.md "H+I+J 묶음 PR" 표현은 분할 의도로 갱신
+- **DB 인덱스 추가 보류** — `tx_apt_trade(bjd_code, contract_date)` / `tx_apt_rent(bjd_code, contract_date)` 복합 인덱스는 schema.sql에 이미 박혀있음. EXPLAIN ANALYZE로 freshness 쿼리(`MAX(contract_date)`) **Seq Scan** 확정(local Docker 5456 rows · 3ms): 복합 인덱스의 leading column이 `bjd_code`라 활용 안 됨. Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정
+- **MV 변경 없음** — Stage 1은 측정 + polygons 정적화만. mv_dong_stats / mv_jeonse_ratio 그대로
+
 ## [v0.8.1] - 2026-05-09 - /api/affordable 두 쿼리 Promise.all 병렬화 + Server-Timing 헤더
 
 ### 변경
