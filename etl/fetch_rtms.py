@@ -4,12 +4,14 @@ import argparse
 import math
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
 import pandas as pd
 import psycopg2
+import requests
 from dotenv import load_dotenv
 from psycopg2.extras import execute_values
 from PublicDataReader import TransactionPrice
@@ -81,6 +83,37 @@ def month_tokens(reference: date, count: int = 3) -> list[str]:
     return tokens
 
 
+def parse_year_month(value: str) -> tuple[int, int]:
+    if len(value) != 6 or not value.isdigit():
+        raise ValueError(f"month must be YYYYMM, got {value!r}")
+    year = int(value[:4])
+    month = int(value[4:])
+    if month < 1 or month > 12:
+        raise ValueError(f"month must be YYYYMM, got {value!r}")
+    return year, month
+
+
+def month_range_desc(start_month: str, end_month: str) -> list[str]:
+    start_year, start_month_number = parse_year_month(start_month)
+    end_year, end_month_number = parse_year_month(end_month)
+    if (start_year, start_month_number) < (end_year, end_month_number):
+        raise ValueError(
+            f"--start-month must be newer than or equal to --end-month: "
+            f"{start_month} < {end_month}"
+        )
+
+    tokens: list[str] = []
+    year = start_year
+    month = start_month_number
+    while (year, month) >= (end_year, end_month_number):
+        tokens.append(f"{year:04d}{month:02d}")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    return tokens
+
+
 def normalize_text(value: Any) -> str | None:
     if value is None:
         return None
@@ -116,14 +149,35 @@ def build_bjd_code_from_columns(row: pd.Series) -> str | None:
     return f"{sigungu_code.zfill(5)}{umd_code.zfill(5)}"
 
 
-def fetch_month(api: TransactionPrice, gu_code: str, year_month: str, trade_type: str) -> pd.DataFrame:
-    return api.get_data(
-        property_type="아파트",
-        trade_type=trade_type,
-        sigungu_code=gu_code,
-        year_month=year_month,
-        translate=True,
-    )
+def fetch_month(
+    api: TransactionPrice,
+    gu_code: str,
+    year_month: str,
+    trade_type: str,
+    *,
+    retries: int = 3,
+    retry_sleep_seconds: float = 2.0,
+) -> pd.DataFrame:
+    for attempt in range(1, retries + 1):
+        try:
+            return api.get_data(
+                property_type="아파트",
+                trade_type=trade_type,
+                sigungu_code=gu_code,
+                year_month=year_month,
+                translate=True,
+            )
+        except requests.exceptions.RequestException as exc:
+            if attempt >= retries:
+                raise
+            print(
+                f"ETL retry: year_month={year_month} gu_code={gu_code} "
+                f"trade_type={trade_type} attempt={attempt}/{retries} error={exc}",
+                file=sys.stderr,
+            )
+            time.sleep(retry_sleep_seconds)
+
+    raise RuntimeError("unreachable")
 
 
 def load_bjd_lookup(conn: psycopg2.extensions.connection) -> dict[tuple[str, str], str]:
@@ -365,9 +419,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             f"정기 cron은 default 3 유지(신고지연 보정), 풀 재적재 1회용은 24."
         ),
     )
+    parser.add_argument(
+        "--start-month",
+        help="이어받기용 최신 조회월 YYYYMM. --end-month와 함께 사용.",
+    )
+    parser.add_argument(
+        "--end-month",
+        help="이어받기용 과거 조회월 YYYYMM. --start-month와 함께 사용.",
+    )
     args = parser.parse_args(argv)
     if args.months < 1 or args.months > MAX_MONTHS:
         parser.error(f"--months must be 1..{MAX_MONTHS}, got {args.months}")
+    if bool(args.start_month) != bool(args.end_month):
+        parser.error("--start-month and --end-month must be used together")
+    if args.start_month and args.end_month:
+        try:
+            month_range_desc(args.start_month, args.end_month)
+        except ValueError as exc:
+            parser.error(str(exc))
     return args
 
 
@@ -379,8 +448,11 @@ def main() -> int:
 
     db_config = DbConfig(dsn=require_env("DATABASE_URL"))
     api = TransactionPrice(require_env("RTMS_KEY"))
-    months = month_tokens(date.today(), count=args.months)
-    print(f"ETL started: months={args.months} (window {months[-1]}~{months[0]})")
+    if args.start_month and args.end_month:
+        months = month_range_desc(args.start_month, args.end_month)
+    else:
+        months = month_tokens(date.today(), count=args.months)
+    print(f"ETL started: months={len(months)} (window {months[-1]}~{months[0]})")
 
     with psycopg2.connect(db_config.dsn) as conn:
         ensure_etl_status_table(conn)
@@ -393,11 +465,13 @@ def main() -> int:
         try:
             for year_month in months:
                 for gu_code in TARGET_GU:
+                    print(f"ETL fetch: year_month={year_month} gu_code={gu_code} trade_type=매매")
                     trade_df = fetch_month(api, gu_code, year_month, "매매")
                     trade_rows_inserted += insert_trade_rows(
                         conn, normalize_trade_df(trade_df, lookup)
                     )
 
+                    print(f"ETL fetch: year_month={year_month} gu_code={gu_code} trade_type=전월세")
                     rent_df = fetch_month(api, gu_code, year_month, "전월세")
                     rent_rows_inserted += insert_rent_rows(
                         conn, normalize_rent_df(rent_df, lookup)
