@@ -3,7 +3,7 @@ index: 15
 slug: sidepanel-recent-load-more
 date: 2026-05-10
 phase: "Phase 1.5 — 사이드패널 깊이 보기"
-git_sha: 6296136 (dirty)
+git_sha: ec509fb
 viewport: 1920x1080 + 390x844
 ---
 
