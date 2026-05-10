@@ -329,6 +329,7 @@ curl -H "x-vercel-protection-bypass: $BYPASS" "$PREVIEW/api/health"
 같은 워크플로우가 2회 이상 반복되면 즉시 `/skill-creator:skill-creator` 호출해서 스킬화 검토. 예시:
 - TIL + CHANGELOG + tasks 일괄 갱신 → `til-flow` 스킬로 분리됨 (2026-05-04)
 - 스냅샷 캡처 → `snapshot` 스킬 (글로벌)
+  - eodigakka 스냅샷 기본 선택 폴리곤: **북아현동** (`bjd_code=1141011000`). 별도 지시가 없으면 스냅샷 캡처 전에 북아현동 폴리곤을 선택해 SidePanel/선택 강조 상태를 기본 기준으로 남긴다.
 - client-side 토큰 환경별 분리 발급 + Vercel env 분리 + redeploy + 검증 → `client-token-rotation` 스킬로 분리됨 (2026-05-05). Mapbox 토큰 회전이 첫 인스턴스, Sentry DSN·Analytics·Stripe publishable key 등 재적용 예정
 - 향후 후보: 모바일 UX 회귀 검증, 동 폴리곤 적재 절차 등
 

@@ -307,9 +307,9 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
     - 모바일 시트 안에서 자연스러운 무한 스크롤도 옵션 — 다만 시트 내부 스크롤 + 더보기 명시 클릭이 더 명확
     - 트리거: 매·전 분리 task 완료 후
   - [ ] **모바일 UX 잔여**: swipe-down 닫기 제스처 (bottom sheet 1차 — `useIsNarrow` 분기·백드롭·드래그 핸들 visual은 2026-05-05 완료)
-- [~] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — 컨트롤 collapsible만 1차 처리 완료 (2026-05-05)
+- [x] **모바일 범례 분리 + 컨트롤 패널 시야 점유 축소** — 컨트롤 collapsible 1차 처리(2026-05-05) + 모바일 범례 floating chip 완료(2026-05-10)
   - [x] (B) 컨트롤 패널 collapsible — 기본 접힘 + 1줄 요약 + 토글, 사용자 토글 후 자동 동기화 stop. 모바일 뷰에서 지도 점유율 90% 이상 확보
-  - [ ] (A) 범례 floating chip — 별도 시트 분리는 후속
+  - [x] (A) 범례 floating chip — 모바일에서 컨트롤 패널 밖 좌하단 chip으로 분리, 탭 시 compact 범례 sheet 노출. SidePanel bottom sheet가 열리면 겹침 방지를 위해 숨김
 - [ ] **슬라이더 / 카세트 버튼 햅틱 피드백** — 모바일 PWA에서 슬라이더 핸들 step 변경 시·카세트 버튼 클릭 시 진동
   - Web Vibration API (`navigator.vibrate(10)`)는 Android Chrome만 지원, iOS Safari 차단 — 모바일 한정 / 미지원 환경 graceful degradation
   - 단계: ±1천만 = 짧은 진동(8ms), ±1억 = 중간(15ms), ±10억 = 긴 진동(30ms)
