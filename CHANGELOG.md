@@ -10,6 +10,19 @@
 
 ---
 
+## [Unreleased] - 강북 14구 최근 거래 50건 marquee 티커
+
+### 추가
+- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. ETL freshness 문자열과 `Server-Timing` 포함.
+- `web/components/RecentTickerBar.tsx` — footer 바로 위에 표시되는 최근 거래 marquee 티커 추가. hover/focus 시 정지, `prefers-reduced-motion`에서는 수동 가로 스크롤로 폴백.
+
+### 변경
+- `web/app/page.tsx` — `/api/recent`를 mount 시 1회 가져와 티커에 연결하고, 항목 클릭은 기존 `selectedBjd` SidePanel 경로로 전달.
+
+### 검증
+- `web/tests/e2e/api.spec.ts` — `/api/recent` 응답 스키마와 50건 제한 회귀 가드 추가.
+- `web/tests/e2e/map.spec.ts` — 티커 노출 및 항목 클릭 → SidePanel 열림 회귀 가드 추가.
+
 ## [v0.9.0] - 2026-05-10 - URL 쿼리 파라미터 양방향 동기화
 
 PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반영. 새로고침·딥링크 공유·외부 진입 시 슬라이더·토글 상태 그대로 복원. Phase 1 임장 후보 목록을 URL로 주고받을 수 있게 됨.
