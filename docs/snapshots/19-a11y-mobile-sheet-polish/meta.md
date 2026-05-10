@@ -3,7 +3,7 @@ index: 19
 slug: a11y-mobile-sheet-polish
 date: 2026-05-11
 phase: "Phase 1 — 접근성 + 모바일 UX 마무리"
-git_sha: 9522dc5
+git_sha: 3a43eeb (snapshot content commit)
 viewport: 1920x1080 + 390x844
 ---
 
