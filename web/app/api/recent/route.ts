@@ -4,6 +4,37 @@ import { sql } from 'kysely';
 
 import { db } from '../../../lib/db';
 
+const SIGUNGU_NAME_SQL = sql<string>`
+  CASE LEFT(bjd_code, 5)
+    WHEN '11110' THEN '종로구'
+    WHEN '11140' THEN '중구'
+    WHEN '11170' THEN '용산구'
+    WHEN '11200' THEN '성동구'
+    WHEN '11215' THEN '광진구'
+    WHEN '11230' THEN '동대문구'
+    WHEN '11260' THEN '중랑구'
+    WHEN '11290' THEN '성북구'
+    WHEN '11305' THEN '강북구'
+    WHEN '11320' THEN '도봉구'
+    WHEN '11350' THEN '노원구'
+    WHEN '11380' THEN '은평구'
+    WHEN '11410' THEN '서대문구'
+    WHEN '11440' THEN '마포구'
+    WHEN '11470' THEN '양천구'
+    WHEN '11500' THEN '강서구'
+    WHEN '11530' THEN '구로구'
+    WHEN '11545' THEN '금천구'
+    WHEN '11560' THEN '영등포구'
+    WHEN '11590' THEN '동작구'
+    WHEN '11620' THEN '관악구'
+    WHEN '11650' THEN '서초구'
+    WHEN '11680' THEN '강남구'
+    WHEN '11710' THEN '송파구'
+    WHEN '11740' THEN '강동구'
+    ELSE ''
+  END
+`;
+
 interface RecentTxRow {
   mode: 'TRADE' | 'JEONSE';
   contract_date: string;
@@ -36,7 +67,7 @@ async function fetchRecentData(): Promise<RecentTxData> {
         mode,
         contract_date::text AS contract_date,
         bjd_code,
-        sigungu,
+        COALESCE(NULLIF(sigungu, ''), ${SIGUNGU_NAME_SQL}) AS sigungu,
         dong,
         complex_name,
         CAST(area_m2 AS DOUBLE PRECISION) AS area_m2,
