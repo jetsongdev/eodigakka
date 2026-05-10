@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - perf(web): /api/polygons 정적화 + complexes Server-Timing 측정 도구 (Stage 1)
+## [v0.8.2] - 2026-05-10 - perf(web): /api/polygons 정적화 + complexes Server-Timing 측정 도구 (Stage 1)
 
 Production cold latency 진단 후 H+I+J 묶음 PR을 두 단계로 분할. 이번이 **Stage 1**: 측정 도구 + polygons 정적화. cache layer는 Stage 2.
 
