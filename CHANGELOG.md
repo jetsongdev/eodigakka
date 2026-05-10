@@ -15,7 +15,8 @@
 ### 추가
 - `.claude/settings.json` + `.claude/hooks/ensure-worktree-env-local.sh` — Claude `SessionStart` 시 cwd가 `.claude/worktrees/*`이면 root checkout의 `web/.env.local`을 worktree `web/.env.local`로 symlink. 기존 파일이나 다른 symlink는 덮어쓰지 않고 skip.
 - `web/tests/e2e/ui-a11y.spec.ts` — DB/Mapbox 없이 API mock으로 `<main>` landmark, footer 출처 링크 underline, 모바일 SidePanel swipe-down 닫기를 검증.
-- `docs/snapshots/19-a11y-mobile-sheet-polish/` — 접근성/모바일 sheet polish 시각 기록.
+- `docs/blog/2026-05-11-vercel-preview-deploy-quota-rolling-24h.md` — Vercel Hobby preview deploy quota가 자정 리셋이 아니라 rolling 24h였던 현장 메모.
+- `docs/snapshots/21-a11y-mobile-sheet-polish/` — 접근성/모바일 sheet polish 시각 기록.
 
 ### 변경
 - `web/app/page.tsx` — 최상위 wrapper를 `<main>`으로 바꾸고 footer 보조 텍스트 contrast 및 출처 링크 underline을 보정.
@@ -31,6 +32,49 @@
 - `cd web && npm run build`
 - `cd web && npx playwright test tests/e2e/ui-a11y.spec.ts`
 - `cd web && npx playwright test --workers=1` — 20 passed, 6 failed. 잔여 실패는 기존 데이터/test fragility: `/api/recent` 빈 `sigungu`, marquee ticker 안정 클릭, `전세` strict selector, SidePanel 최근 거래 heading expectation.
+
+---
+
+## [v0.12.4] - 2026-05-11 - Neon storage 한도 모니터링
+
+### 추가
+- `.github/workflows/neon-storage-alert.yml` — 주 1회 Neon DB size를 점검하고 free plan 0.5GB 기준 80% 이상이면 `neon-storage` 이슈를 생성하는 운영 모니터링 workflow 추가.
+
+### 변경
+- `tasks.md` — Phase B 운영 모니터링의 Neon storage 항목 완료 처리.
+- `.github/workflows/etl.yml`, `.github/workflows/telegram-deploy-notify.yml` — 기존 `actionlint` shellcheck 경고 정리.
+
+### 검증
+- `actionlint .github/workflows/neon-storage-alert.yml`
+- `git diff --check`
+
+---
+
+## [v0.12.3] - 2026-05-11 - 최초 방문 힌트와 버전 변경 안내
+
+### 추가
+- `web/app/page.tsx` — `localStorage`에 마지막 확인 앱 버전을 저장하고, 최초 방문 시 핵심 기능 힌트 UI를 표시. 저장된 버전이 현재 앱 버전과 다르면 새 버전 안내를 표시하고 닫을 때 현재 버전으로 갱신.
+- `docs/snapshots/20-whats-new-first-visit-hint/` — 최초 방문 힌트가 열린 데스크톱/모바일 상태 스냅샷 추가.
+
+### 검증
+- `npx tsc --noEmit`
+- `git diff --check`
+- Playwright smoke: 최초 방문 안내 노출, 닫기 후 `eodigakka:last-seen-version=0.11.1` 저장 및 재로딩 후 미노출 확인. 이전 버전 `0.10.0` 저장 시 새 버전 안내 노출과 현재 버전 저장 확인.
+
+---
+
+## [v0.12.2] - 2026-05-11 - 최근 거래 티커 구 이름 fallback
+
+### 추가
+- `docs/snapshots/19-recent-ticker-label/` — 최근 거래 티커 왼쪽 고정 라벨이 보이는 데스크톱·모바일 시각 기록.
+
+### 수정
+- `web/app/api/recent/route.ts` — 운영 `bjd_polygon.sigungu` 값이 비어 있어 최근 거래 티커 위치가 `·응암동`처럼 표시될 수 있던 문제를 보정. `bjd_code` 앞 5자리로 서울 25구 이름을 fallback 매핑해 `/api/recent` 응답의 `sigungu`를 항상 채운다.
+- `web/components/RecentTickerBar.tsx` — 티커 위치 표기를 `은평·응암동` 대신 `은평구·응암동`처럼 구 단위까지 보이도록 조정.
+- `web/components/RecentTickerBar.tsx` — 티커 왼쪽에 `최근 거래 정보` 고정 라벨을 추가해 흐르는 항목들이 최근 실거래 데이터임을 즉시 인식할 수 있게 조정.
+
+### 검증
+- Production `/api/recent` 응답 200·50건 반환 확인. 기존 배포 응답에서는 `sigungu` 50/50건이 빈 문자열임을 확인해 회귀 원인을 확정.
 
 ---
 

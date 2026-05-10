@@ -1,0 +1,137 @@
+name: Neon storage alert
+
+on:
+  schedule:
+    # 매주 일요일 20:30 UTC = 월요일 05:30 KST
+    - cron: '30 20 * * 0'
+  workflow_dispatch:
+    inputs:
+      force_alert:
+        description: '강제로 alert 발사 (dedup·이슈 본문 검증용)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: neon-storage-alert
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create neon-storage \
+            --color 5319E7 \
+            --description "Neon DB storage usage warning" \
+            --force
+
+      - name: Check Neon storage usage
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            {
+              echo "skipped=true"
+              echo "over_threshold=false"
+            } >> "$GITHUB_OUTPUT"
+            echo "DATABASE_URL not set, skipping Neon storage check"
+            exit 0
+          fi
+
+          row=$(psql "${DATABASE_URL}" -tAF '|' <<'SQL'
+          WITH usage AS (
+            SELECT
+              current_database() AS database_name,
+              pg_database_size(current_database()) AS bytes,
+              500 * 1024 * 1024 AS limit_bytes
+          )
+          SELECT
+            database_name,
+            bytes,
+            pg_size_pretty(bytes),
+            limit_bytes,
+            ROUND(bytes * 100.0 / limit_bytes, 2),
+            (bytes >= limit_bytes * 0.8)::text,
+            to_char(NOW() AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI:SS')
+          FROM usage;
+          SQL
+          )
+
+          database_name="$(echo "$row" | cut -d'|' -f1)"
+          bytes="$(echo "$row" | cut -d'|' -f2)"
+          pretty="$(echo "$row" | cut -d'|' -f3)"
+          limit_bytes="$(echo "$row" | cut -d'|' -f4)"
+          pct="$(echo "$row" | cut -d'|' -f5)"
+          over_threshold="$(echo "$row" | cut -d'|' -f6)"
+          now_kst="$(echo "$row" | cut -d'|' -f7)"
+
+          {
+            echo "skipped=false"
+            echo "database_name=$database_name"
+            echo "bytes=$bytes"
+            echo "pretty=$pretty"
+            echo "limit_bytes=$limit_bytes"
+            echo "pct=$pct"
+            echo "over_threshold=$over_threshold"
+            echo "now_kst=$now_kst"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "database=${database_name} size=${pretty} usage=${pct}% over_threshold=${over_threshold} now_kst=${now_kst}"
+
+      - name: Create alert issue (storage threshold or force)
+        if: ${{ steps.check.outputs.skipped != 'true' && (steps.check.outputs.over_threshold == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force_alert)) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATABASE_NAME: ${{ steps.check.outputs.database_name }}
+          DB_SIZE: ${{ steps.check.outputs.pretty }}
+          DB_BYTES: ${{ steps.check.outputs.bytes }}
+          LIMIT_BYTES: ${{ steps.check.outputs.limit_bytes }}
+          USAGE_PCT: ${{ steps.check.outputs.pct }}
+          NOW_KST: ${{ steps.check.outputs.now_kst }}
+          IS_FORCE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_alert }}
+        run: |
+          existing=$(gh issue list --label neon-storage --state open --json number --jq 'length')
+          if [ "${existing}" -gt 0 ]; then
+            echo "이미 open neon-storage 이슈 ${existing}개 — 생성 skip (dedup)"
+            exit 0
+          fi
+
+          body_file="$(mktemp)"
+          {
+            echo "## 현상"
+            echo
+            echo "Neon free plan storage 사용량이 80% 경계에 도달했거나 검증용 alert가 강제 발사되었습니다."
+            echo
+            echo "- DB: \`${DATABASE_NAME}\`"
+            echo "- 현재 사용량: \`${DB_SIZE}\` (\`${DB_BYTES}\` bytes)"
+            echo "- 기준 한도: \`${LIMIT_BYTES}\` bytes (0.5GB 기준)"
+            echo "- 사용률: \`${USAGE_PCT}%\`"
+            echo "- 점검 시각 (KST): \`${NOW_KST}\`"
+            echo
+            echo "## 점검 체크리스트"
+            echo
+            echo "- [ ] Neon 콘솔 storage usage 확인"
+            echo "- [ ] raw 거래 테이블 월별 row 증가량 확인"
+            echo "- [ ] 필요 시 raw 테이블 TTL 또는 paid plan 전환 결정"
+            echo "- [ ] 정상화 후 본 이슈 close (다음 threshold 발생 시 자동 재생성됨)"
+            if [ "${IS_FORCE}" = "true" ]; then
+              echo
+              echo "> \`workflow_dispatch force_alert=true\`로 발사된 검증용 이슈입니다."
+            fi
+          } > "$body_file"
+
+          gh issue create \
+            --label neon-storage \
+            --title "[Neon] storage 사용량 경고 — ${USAGE_PCT}% (${NOW_KST} KST)" \
+            --body-file "$body_file"

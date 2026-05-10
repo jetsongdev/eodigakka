@@ -26,4 +26,6 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 16 | [최근 거래 월별 sticky 그룹 + 자체 스크롤 박스 (max 320px)](16-recent-tx-grouping/) | 2026-05-10 | a1104bd | 1.5 (sidepanel 깊이 보기 라운드 2) |
 | 17 | [footer 위 강북 14구 최근 거래 ticker](17-recent-tx-ticker/) | 2026-05-10 | c3bca44 | 1 (market freshness ticker) |
 | 18 | [모바일 범례 floating chip](18-mobile-legend-chip/) | 2026-05-11 | de001de | 1 (mobile UX 마무리) |
-| 19 | [접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기](19-a11y-mobile-sheet-polish/) | 2026-05-11 | 3a43eeb | 1 (접근성 + 모바일 UX 마무리) |
+| 19 | [최근 거래 티커 라벨](19-recent-ticker-label/) | 2026-05-11 | f90d49a | 1 (market freshness ticker) |
+| 20 | [최초 방문 핵심 기능 힌트 + 버전 변경 안내](20-whats-new-first-visit-hint/) | 2026-05-11 | 7f1ec37 | 1.5 (최초 방문/버전 변경 안내) |
+| 21 | [접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기](21-a11y-mobile-sheet-polish/) | 2026-05-11 | 3a43eeb | 1 (접근성 + 모바일 UX 마무리) |

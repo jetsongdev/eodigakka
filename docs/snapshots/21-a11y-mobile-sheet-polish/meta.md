@@ -1,5 +1,5 @@
 ---
-index: 19
+index: 21
 slug: a11y-mobile-sheet-polish
 date: 2026-05-11
 phase: "Phase 1 — 접근성 + 모바일 UX 마무리"
@@ -7,7 +7,7 @@ git_sha: 3a43eeb (snapshot content commit)
 viewport: 1920x1080 + 390x844
 ---
 
-# 19 — 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
+# 21 — 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
 
 Lighthouse baseline에서 지적된 footer 접근성 항목과 모바일 bottom sheet 잔여 UX를 함께 정리한 시점. 페이지 최상위 landmark를 `<main>`으로 바꾸고, footer 출처 링크는 색상만이 아니라 underline으로도 링크임을 드러낸다. 모바일 SidePanel은 상단 drag handle 영역을 넓히고 아래로 끌어 닫을 수 있게 했다.
 
