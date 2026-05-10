@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 모바일 범례 floating chip
+## [v0.12.1] - 2026-05-11 - 모바일 범례 floating chip
 
 ### 추가
 - 모바일에서 컨트롤 패널 내부 범례를 숨기고 지도 좌하단 `범례` floating chip으로 분리. chip을 누르면 compact `지도 범례` sheet가 열리고, SidePanel bottom sheet가 열리면 겹침 방지를 위해 chip을 숨김.
