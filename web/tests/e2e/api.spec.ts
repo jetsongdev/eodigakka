@@ -178,6 +178,18 @@ test('GET /api/dong/:bjd/recent paginates trades with has_more flag', async ({ r
   expect(nextBody.rows.length).toBeGreaterThanOrEqual(1);
 });
 
+test('GET /api/dong/:bjd/recent allows deep pagination offsets', async ({ request }) => {
+  const response = await request.get(
+    '/api/dong/1141011000/recent?mode=trade&offset=210&limit=20',
+  );
+
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  expect(body.offset).toBe(210);
+  expect(body.limit).toBe(20);
+  expect(Array.isArray(body.rows)).toBe(true);
+});
+
 test('GET /api/dong/:bjd/recent rejects invalid mode and bjd', async ({ request }) => {
   const badMode = await request.get('/api/dong/1138010300/recent?mode=invalid&offset=0&limit=10');
   expect(badMode.status()).toBe(400);

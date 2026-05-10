@@ -14,7 +14,7 @@ interface RecentTxRow {
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
-const MAX_OFFSET = 200;
+const MAX_OFFSET = 1000;
 
 async function fetchRecent(
   bjd: string,
