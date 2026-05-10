@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
+## [v0.8.4] - 2026-05-10 - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
 
 Stage 2a(v0.8.3)로 freshness 쿼리는 fresh=220ms로 직격됐지만 Production cold에선 stats(`mv_dong_stats` JOIN) 쿼리가 새 dominant이 됨(cold 446ms~1711ms). Stage 2b는 응답 자체를 edge cache에 박는 마지막 한 방.
 
