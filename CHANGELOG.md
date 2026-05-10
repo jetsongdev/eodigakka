@@ -10,6 +10,21 @@
 
 ---
 
+## [v0.12.0] - 2026-05-11 - 강북 14구 최근 거래 50건 marquee 티커
+
+### 추가
+- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. `use cache: remote`, ETL freshness 문자열, `Server-Timing` 포함.
+- `web/components/RecentTickerBar.tsx` — footer 바로 위에 표시되는 최근 거래 marquee 티커 추가. hover/focus 시 정지, `prefers-reduced-motion`에서는 수동 가로 스크롤로 폴백.
+
+### 변경
+- `web/app/page.tsx` — `/api/recent`를 mount 시 1회 가져와 티커에 연결하고, 항목 클릭은 기존 `selectedBjd` SidePanel 경로로 전달.
+
+### 검증
+- `web/tests/e2e/api.spec.ts` — `/api/recent` 응답 스키마와 50건 제한 회귀 가드 추가.
+- `web/tests/e2e/map.spec.ts` — 티커 노출 및 항목 클릭 → SidePanel 열림 회귀 가드 추가.
+
+---
+
 ## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
 
 Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.

@@ -79,6 +79,32 @@ test('GET /api/affordable jeonse returns dongs with color when present', async (
   }
 });
 
+test('GET /api/recent returns the latest 50 trade and jeonse rows', async ({ request }) => {
+  const response = await request.get('/api/recent');
+
+  expect(response.status()).toBe(200);
+
+  const body = await response.json();
+
+  expect(Array.isArray(body.items)).toBe(true);
+  expect(body.items.length).toBeLessThanOrEqual(50);
+  expect(body.generated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(body.data_freshness).toMatch(/RTMS \d{4}-\d{2}-\d{2} 신고분까지|RTMS 신고분 없음/);
+  expect(response.headers()['server-timing']).toMatch(/recent;dur=/);
+
+  for (const item of body.items) {
+    expect(['TRADE', 'JEONSE']).toContain(item.mode);
+    expect(item.contract_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(item.bjd_code).toMatch(/^\d{10}$/);
+    expect(item.sigungu).toContain('구');
+    expect(typeof item.dong).toBe('string');
+    expect(typeof item.complex_name).toBe('string');
+    expect(typeof item.area_m2).toBe('number');
+    expect(typeof item.amount_man).toBe('number');
+    expect(item).toHaveProperty('floor');
+  }
+});
+
 test('GET /api/affordable rejects invalid size', async ({ request }) => {
   const response = await request.get('/api/affordable?size=X');
 

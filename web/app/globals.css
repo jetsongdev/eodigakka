@@ -23,6 +23,113 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.recent-ticker-placeholder {
+  flex-shrink: 0;
+  height: 36px;
+  background: #fff;
+  border-top: 1px solid #e8e8e8;
+}
+
+.recent-ticker-bar {
+  flex-shrink: 0;
+  height: 36px;
+  overflow: hidden;
+  background: #fff;
+  border-top: 1px solid #e8e8e8;
+  touch-action: pan-x;
+}
+
+.recent-ticker-track {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  min-width: max-content;
+  list-style: none;
+  animation: ticker-scroll 172s linear infinite;
+}
+
+.recent-ticker-bar:hover .recent-ticker-track,
+.recent-ticker-bar:focus-within .recent-ticker-track {
+  animation-play-state: paused;
+}
+
+.recent-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  flex: 0 0 auto;
+}
+
+.recent-ticker-item + .recent-ticker-item::before {
+  content: '·';
+  color: #c6c6c6;
+  margin: 0 16px;
+}
+
+.recent-ticker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: #333;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.recent-ticker-button:focus-visible {
+  outline: 2px solid #1f6e3a;
+  outline-offset: -2px;
+}
+
+.recent-ticker-mode {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .recent-ticker-placeholder,
+  .recent-ticker-bar {
+    height: 28px;
+  }
+
+  .recent-ticker-button {
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .recent-ticker-mode {
+    height: 16px;
+    padding: 0 5px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recent-ticker-bar {
+    overflow-x: auto;
+  }
+
+  .recent-ticker-track {
+    animation: none;
+  }
+}
+
 /* Mapbox NavigationControl zoom 버튼 크기 키우기 — 기본 30×30 → 44×44 (모바일 터치 타겟 권장 사이즈).
    모든 viewport 공통 적용 — 데스크톱도 hit area 확대로 사용성 ↑. */
 .mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in,
