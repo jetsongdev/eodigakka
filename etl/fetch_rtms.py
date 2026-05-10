@@ -222,12 +222,32 @@ def ensure_etl_status_table(conn: psycopg2.extensions.connection) -> None:
               last_started_at TIMESTAMPTZ,
               last_succeeded_at TIMESTAMPTZ,
               mv_refreshed_at TIMESTAMPTZ,
+              last_contract_date_trade DATE,
+              last_contract_date_rent DATE,
               last_error TEXT,
               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
+        cur.execute(
+            """
+            ALTER TABLE etl_job_status
+              ADD COLUMN IF NOT EXISTS last_contract_date_trade DATE,
+              ADD COLUMN IF NOT EXISTS last_contract_date_rent DATE
+            """
+        )
     conn.commit()
+
+
+def compute_last_contract_dates(
+    conn: psycopg2.extensions.connection,
+) -> tuple[date | None, date | None]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT MAX(contract_date) FROM tx_apt_trade")
+        trade_max = cur.fetchone()[0]
+        cur.execute("SELECT MAX(contract_date) FROM tx_apt_rent")
+        rent_max = cur.fetchone()[0]
+    return trade_max, rent_max
 
 
 def update_etl_status(
@@ -236,9 +256,12 @@ def update_etl_status(
     started: bool = False,
     succeeded: bool = False,
     refreshed: bool = False,
+    last_contract_date_trade: date | None = None,
+    last_contract_date_rent: date | None = None,
     error: str | None = None,
 ) -> None:
     set_clauses = ["updated_at = NOW()"]
+    params: list[Any] = []
     if started:
         set_clauses.append("last_started_at = NOW()")
         set_clauses.append("last_error = NULL")
@@ -247,11 +270,15 @@ def update_etl_status(
         set_clauses.append("last_error = NULL")
     if refreshed:
         set_clauses.append("mv_refreshed_at = NOW()")
+    if last_contract_date_trade is not None:
+        set_clauses.append("last_contract_date_trade = %s")
+        params.append(last_contract_date_trade)
+    if last_contract_date_rent is not None:
+        set_clauses.append("last_contract_date_rent = %s")
+        params.append(last_contract_date_rent)
     if error is not None:
         set_clauses.append("last_error = %s")
-        params: tuple[Any, ...] = (error,)
-    else:
-        params = tuple()
+        params.append(error)
 
     with conn.cursor() as cur:
         cur.execute(
@@ -268,7 +295,7 @@ def update_etl_status(
             SET {", ".join(set_clauses)}
             WHERE job_name = %s
             """,
-            params + (ETL_JOB_NAME,),
+            tuple(params) + (ETL_JOB_NAME,),
         )
     conn.commit()
 
@@ -363,7 +390,14 @@ def main() -> int:
                     )
 
             refresh_materialized_views(db_config.dsn)
-            update_etl_status(conn, succeeded=True, refreshed=True)
+            trade_max_date, rent_max_date = compute_last_contract_dates(conn)
+            update_etl_status(
+                conn,
+                succeeded=True,
+                refreshed=True,
+                last_contract_date_trade=trade_max_date,
+                last_contract_date_rent=rent_max_date,
+            )
             print(
                 f"ETL completed: trade_rows_seen={trade_rows_inserted}, "
                 f"rent_rows_seen={rent_rows_inserted}"

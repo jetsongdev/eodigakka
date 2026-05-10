@@ -10,7 +10,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (2026-05-10 갱신, Stage 1 PR 작성 직후)**:
+**현재 우선순위 추천 (2026-05-10 갱신, Stage 1 prod 측정 + Stage 2-A 분할 결정 직후)**:
 
 🚨 **최우선 — Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1 진행):
 
@@ -165,7 +165,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] **G 부분 — Server-Timing 헤더 + body `_timing` fallback** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. Vercel runtime이 헤더 strip하는 케이스 대비 응답 body에도 `_timing` 박음. DevTools Network → Preview/Response 탭에서 즉시 노출. e2e 회귀 가드 추가
 - [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
 - [x] **E 진단 완료** (2026-05-10, Stage 1) — `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade` **Seq Scan** 확정 (local Docker 5456 rows, 3ms). 기존 `(bjd_code, contract_date)` 복합 인덱스의 leading column이 `bjd_code`라 `MAX` 단독엔 활용 안 됨 (advisor 가설 정확). Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정 — (b)가 raw 인덱스 추가 없이 1행 SELECT라 더 깔끔
-- [ ] **D + C 적용 (Stage 2 PR)** — D는 모든 호출 ~50ms 응답(`'use cache'` directive + `cacheTag('mv_dong_stats')` + ETL workflow에서 Vercel deploy hook curl POST로 invalidate), C는 freshness 쿼리 우회 (위 E 결정 따라). Stage 1 prod 측정 후 진행
+- [x] **C 적용 (Stage 2-A PR, 2026-05-10, perf/stage-2-cache 브랜치)** — Stage 1 prod 측정에서 `fresh_ms=1604.5` 재확인 후 즉시 진행. (b) 컬럼화 채택: `etl_job_status.last_contract_date_trade/rent DATE` + ETL 종료 시 `compute_last_contract_dates()`로 한 번 계산해 UPDATE. API는 mode별 컬럼 SELECT 1행. ALTER TABLE IF NOT EXISTS로 Neon 자동 마이그레이션. e2e `fresh_ms<200` 가드. **advisor 검토로 D(cache)와 분리** — cache는 `force-dynamic` 제거·primitive args·`Server-Timing` cached flag 등 mechanical constraint가 커서 entangle 회피
+- [ ] **D 적용 (Stage 2-B PR, 다음)** — affordable `'use cache'` directive + `cacheTag('mv_dong_stats')` + ETL workflow에서 `/api/_revalidate?tag=mv_dong_stats&secret=...` POST로 invalidate. cache hit ~50ms. cached 응답 시 `_timing` 의미 없으니 `cached: boolean` flag 추가 결정 필요 (advisor 지적)
 
 ### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 
@@ -219,7 +220,10 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 **진척**:
 - [x] **A. Server-Timing 적용 (Stage 1 PR)** (2026-05-10) — 6개 sub-query(`dong_name`, `trade_top`, `jeonse_top`, `recent_trade`, `recent_jeonse`, `distribution`) 각각 분리 측정. `Promise.all` `.then()` 패턴으로 wall-clock 시점 기록. 응답 헤더 6 metric + body `_timing: { dong_name_ms, trade_top_ms, jeonse_top_ms, recent_trade_ms, recent_jeonse_ms, distribution_ms, db_ms (=max), eval_ms }`. dev 첫 호출에서 `jeonse_top=60.7, recent_trade=58.9` dominant 관찰 (local Docker라 prod와 다를 수 있음). Production deploy 후 warm 2.13s의 진짜 dominant 확정 → Stage 2 우선순위 결정. e2e 회귀 가드 추가
-- [ ] **B / E / C / F (Stage 2 PR)** — Stage 1 prod 측정 결과 보고 결정. B(인덱스 추가)는 EXPLAIN 결과 따라, E(cache)는 H-D와 동일 패턴(`'use cache'` + cacheTag), F(MV 신설)는 C(TOP5 PERCENTILE_CONT) dominant일 때만
+- [-] **B (인덱스 추가) 취소 — 이미 존재** (2026-05-10) — Stage 1 prod 측정 후 `\d tx_apt_trade` / `\d tx_apt_rent` 확인 결과 양쪽 모두 `(bjd_code, contract_date)` 복합 인덱스 존재. 로컬 EXPLAIN ANALYZE: recent_trade 2.84ms / recent_jeonse 3.53ms (Index Scan Backward 정상). prod 1500ms대 비대칭(`trade_top=223` vs `jeonse_top=1582`, `trade_top=223` vs `recent_trade=1583`)은 **인덱스 부재 아님** — Neon-specific 비용(compute cold start, connection pool, planning) 추정. cache로 우회가 본질
+- [ ] **E (cache, Stage 2-B PR)** — H-D와 동일 패턴으로 같이 묶어 `/api/dong/[bjd]/complexes`에 `'use cache'` + `cacheTag('complexes-${bjd}')` + ETL invalidate. cache hit 시 비대칭 자체 사라짐(DB 안 거침). Stage 2-B에서 진행
+- [ ] **F (MV 신설) — TOP5 dominant 지속 시에만** — Stage 2-B cache 적용 후에도 cache miss 경로의 `jeonse_top=1582ms` 지속이면 그때 `mv_complex_top5` 신설 검토. 우선순위 낮음
+- [ ] **prod warm complexes 재측정** (advisor 지적, 2026-05-10) — 비대칭 7배가 cold만의 현상인지 warm에서도 보이는지 검증. Network 캡처에서 warm 호출들 ~450ms 클러스터링 — 로컬 3ms 대비 여전히 큼. warm `_timing` body로 sub-query별 분포 확인하면 블로그 narrative(인덱스 부재 추정 → Neon cold start 추정) 정확도 결정. 코드 작업엔 무관
 
 ---
 

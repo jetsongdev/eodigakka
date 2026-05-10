@@ -63,8 +63,11 @@ export async function GET(request: NextRequest) {
         ORDER BY s.median_man ASC, s.tx_count_3m DESC
       `.execute(db).then((r) => { tStats = performance.now() - t0; return r; }),
       sql<{ max_contract_date: string | null }>`
-        SELECT MAX(contract_date)::text AS max_contract_date
-        FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
+        SELECT ${sql.raw(
+          statsMode === 'TRADE' ? 'last_contract_date_trade' : 'last_contract_date_rent',
+        )}::text AS max_contract_date
+        FROM etl_job_status
+        WHERE job_name = 'rtms_phase1'
       `.execute(db).then((r) => { tFresh = performance.now() - t0; return r; }),
     ]);
     const tDb = performance.now() - t0;

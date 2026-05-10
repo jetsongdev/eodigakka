@@ -67,6 +67,8 @@ export interface EtlJobStatusTable {
   last_started_at: string | null;
   last_succeeded_at: string | null;
   mv_refreshed_at: string | null;
+  last_contract_date_trade: string | null;
+  last_contract_date_rent: string | null;
   last_error: string | null;
   updated_at: string;
 }

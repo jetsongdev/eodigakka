@@ -10,6 +10,26 @@
 
 ---
 
+## [Unreleased] - perf(web): /api/affordable freshness 쿼리 etl_job_status 컬럼화 (Stage 2-A)
+
+Stage 1(PR #17, v0.8.2) prod 측정 결과 `/api/affordable` `_timing`에서 `fresh_ms=1604.5` 확인. raw 테이블의 `MAX(contract_date)` 풀스캔이 dominant cost 중 절반 이상. Stage 1 진단(EXPLAIN ANALYZE Seq Scan)에서 결정한 옵션 (b) `etl_job_status` 컬럼화로 우회. cache layer는 별개 PR로 분리(advisor 검토 — `'use cache'` directive는 `force-dynamic`·`cookies/headers` 접근·`Server-Timing` observability 등 mechanical constraint가 커서 freshness 우회와 묶지 않음).
+
+### 변경
+- `web/app/api/affordable/route.ts` — freshness 쿼리를 `SELECT MAX(contract_date) FROM tx_apt_trade/rent` 풀스캔에서 `SELECT last_contract_date_trade/rent FROM etl_job_status WHERE job_name='rtms_phase1'` 1행 SELECT로 교체. mode에 따라 컬럼 분기. fresh_ms 약 1604ms → ms 단위 직격 예상
+
+### 추가
+- `etl/fetch_rtms.py` — `compute_last_contract_dates()` 함수 신설 + ETL 종료 시점에 두 raw 테이블의 `MAX(contract_date)` 한 번 계산해 `etl_job_status` UPDATE에 통합. 이전엔 매 API 요청에서 raw 풀스캔 → 이젠 ETL 1회/일에서만 부담
+- `etl/fetch_rtms.py` `ensure_etl_status_table()` — `last_contract_date_trade DATE`, `last_contract_date_rent DATE` 컬럼 추가. CREATE TABLE에 inline + ALTER TABLE ADD COLUMN IF NOT EXISTS로 재실행 안전성 보장. 기존 환경(Neon)도 다음 ETL 실행 시 자동 마이그레이션
+- `etl/fetch_rtms.py` `update_etl_status()` 시그니처 — `last_contract_date_trade`, `last_contract_date_rent` 키워드 인자 추가. 기존 호출부(start/error)는 영향 없음(기본값 None은 SET 절 생성 안 함)
+- `web/lib/db.ts` `EtlJobStatusTable` — 새 컬럼 두 개 추가. Kysely 타입 동기화
+- `web/tests/e2e/api.spec.ts` — affordable trade 테스트에 `body._timing.fresh_ms < 200` 회귀 가드 + `data_freshness` 포맷 매치 추가. 컬럼화 효과 정량 확인
+
+### 결정
+- **Stage 2 분할** — advisor 검토 후 (b) freshness 컬럼화는 cache logic과 entangle 없는 drop-in 변경이라 단독 ship해 isolated 검증. cache PR(D+E)은 후속. cache 위에서 fresh 쿼리도 캐시되니 컬럼화 효과는 cache miss 경로에서만 발현되지만, miss 시에도 사용자가 1.6s 안 부담하도록 둘 다 필요
+- **Phase 2 진입 시 job_name 분리 검토** — 현재 `'rtms_phase1'` 단일 row. 강북 14구 + 경기 인접으로 확장될 때 job_name이 분기되면 fresh 컬럼도 따라 갱신. 이번엔 단순화로 하드코딩
+
+---
+
 ## [v0.8.2] - 2026-05-10 - perf(web): /api/polygons 정적화 + complexes Server-Timing 측정 도구 (Stage 1)
 
 Production cold latency 진단 후 H+I+J 묶음 PR을 두 단계로 분할. 이번이 **Stage 1**: 측정 도구 + polygons 정적화. cache layer는 Stage 2.
