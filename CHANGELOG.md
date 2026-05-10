@@ -12,6 +12,9 @@
 
 ## [v0.12.2] - 2026-05-11 - 최근 거래 티커 구 이름 fallback
 
+### 추가
+- `docs/snapshots/19-recent-ticker-label/` — 최근 거래 티커 왼쪽 고정 라벨이 보이는 데스크톱·모바일 시각 기록.
+
 ### 수정
 - `web/app/api/recent/route.ts` — 운영 `bjd_polygon.sigungu` 값이 비어 있어 최근 거래 티커 위치가 `·응암동`처럼 표시될 수 있던 문제를 보정. `bjd_code` 앞 5자리로 서울 25구 이름을 fallback 매핑해 `/api/recent` 응답의 `sigungu`를 항상 채운다.
 - `web/components/RecentTickerBar.tsx` — 티커 위치 표기를 `은평·응암동` 대신 `은평구·응암동`처럼 구 단위까지 보이도록 조정.
