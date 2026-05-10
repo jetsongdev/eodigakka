@@ -27,6 +27,7 @@
 - **cache key에 limit/offset 포함**: `recent-{bjd}-{mode}-{offset}-{limit}` 태그는 invalidate 시 와일드카드 매칭이 아니라 정확 매칭이지만, `mv_dong_stats` 태그를 함께 부여해 ETL→/api/revalidate 훅이 한 번에 모두 쓸어내게 함.
 - **자체 스크롤 컨테이너 vs 사이드패널 전체 스크롤**: 매매·전세 각 섹션에 `max-height: 320px; overflow-y: auto`로 자체 스크롤 분리. 사이드패널 전체 스크롤은 살아있어 다른 섹션(TOP5·distribution) 접근 가능. nested scroll의 모바일 어색함은 `RECENT_SCROLL_MAX_PX=320`이라 손가락 한 번 스와이프 안에 들어와 실측상 무리 없음. 대안(전체 사이드패널 스크롤만)은 누적 100건+에서 EvidenceCard가 시야 위로 사라져 "지금 보는 동이 어디였더라" 컨텍스트 분실.
 - **`<table>` → `<div>` grid**: `position: sticky`가 table 행 단위에선 브라우저별 동작이 들쭉날쭉(spec gray area). 시각은 grid `1fr auto 36px`로 동일하게 맞추고 sticky 신뢰성 확보. column header(`단지·평형 / 금액 / 일자`)는 스크롤 박스 밖에 둬서 항상 노출.
+- **끝 라벨 `· 여기까지 · 총 N건 ·`**: 더보기 한참 누르다 `has_more=false` 응답이 와서 버튼이 갑자기 사라지면 "끝났는지/버그인지" 모호. 더보기 자리에 작은 회색 라벨로 끝남을 명시. 첫 응답 9건 이하(초기 has_more=false)는 카운트만으로 자명하므로 `rows.length >= RECENT_INITIAL_COUNT(10)` 조건일 때만. 데이터 자체는 ETL이 적재한 직전 3개월(`etl/fetch_rtms.py:356` `count=3`) 윈도우에 한정.
 
 ### 검증
 - `npx tsc --noEmit` 통과 (exit 0).

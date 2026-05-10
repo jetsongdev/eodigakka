@@ -1715,7 +1715,7 @@ function RecentTxSections({
                     더보기 실패: {section.error}
                   </div>
                 )}
-                {section.hasMore && (
+                {section.hasMore ? (
                   <button
                     type="button"
                     onClick={() => loadMore(section.mode)}
@@ -1737,6 +1737,23 @@ function RecentTxSections({
                       ? '불러오는 중...'
                       : `더보기 (+${RECENT_PAGE_SIZE}건)`}
                   </button>
+                ) : (
+                  // 더보기 한참 누르다 버튼이 갑자기 사라지면 "끝났는지/버그인지" 모호 — 명시.
+                  // 첫 응답 9건 이하(초기 has_more=false)는 카운트만으로도 충분하니 라벨 생략.
+                  section.rows.length >= RECENT_INITIAL_COUNT && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        padding: '4px 0',
+                        textAlign: 'center',
+                        fontSize: 10,
+                        color: '#aaa',
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      · 여기까지 · 총 {section.rows.length}건 ·
+                    </div>
+                  )
                 )}
               </>
             )}
