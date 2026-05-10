@@ -417,6 +417,8 @@ function MapPageContent() {
           cashDelta={cashDelta}
         />
 
+        <MobileLegendChip hidden={selectedBjd !== null} />
+
         {(polygonCount === null || affordable === null) && !error && (
           <LoadingOverlay
             polygonCount={polygonCount}
@@ -589,6 +591,7 @@ function ControlPanel({
           loading={loading}
           sizeLabel={sizeLabel}
           cashDelta={cashDelta}
+          showLegend={!isMobile}
         />
       )}
     </div>
@@ -603,6 +606,7 @@ function ControlPanelBody({
   loading,
   sizeLabel,
   cashDelta,
+  showLegend,
 }: {
   query: AffordableQueryState;
   onQueryChange: (next: AffordableQueryState) => void;
@@ -611,6 +615,7 @@ function ControlPanelBody({
   loading: boolean;
   sizeLabel: Record<SizeOption, string>;
   cashDelta: { added: number; removed: number } | null;
+  showLegend: boolean;
 }) {
   return (
     <>
@@ -704,7 +709,7 @@ function ControlPanelBody({
         폴리곤 {polygonCount ?? '?'}개
       </div>
 
-      <Legend />
+      {showLegend && <Legend />}
     </>
   );
 }
@@ -1033,6 +1038,100 @@ function CashDeltaChip({
         </span>
       )}
     </span>
+  );
+}
+
+function MobileLegendChip({ hidden }: { hidden: boolean }) {
+  const isNarrow = useIsNarrow();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isNarrow || hidden) setOpen(false);
+  }, [hidden, isNarrow]);
+
+  if (!isNarrow || hidden) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 12,
+        bottom: 12,
+        zIndex: 2,
+      }}
+    >
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="지도 범례"
+          style={{
+            width: 224,
+            padding: '10px 12px 12px',
+            background: 'rgba(255,255,255,0.94)',
+            border: '1px solid rgba(0,0,0,0.1)',
+            borderRadius: 8,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: 6,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333' }}>범례</div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="범례 닫기"
+              style={{
+                width: 28,
+                height: 28,
+                border: '1px solid #d0d0d0',
+                borderRadius: 4,
+                background: '#fff',
+                color: '#333',
+                cursor: 'pointer',
+                fontSize: 16,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <Legend />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="범례 열기"
+          aria-expanded={open}
+          style={{
+            minWidth: 64,
+            height: 34,
+            padding: '0 12px',
+            border: '1px solid rgba(0,0,0,0.12)',
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.94)',
+            color: '#333',
+            boxShadow: '0 3px 12px rgba(0,0,0,0.18)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            cursor: 'pointer',
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          범례
+        </button>
+      )}
+    </div>
   );
 }
 
