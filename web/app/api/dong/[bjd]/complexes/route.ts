@@ -45,6 +45,13 @@ export async function GET(
     );
   }
 
+  const t0 = performance.now();
+  let dongNameMs = 0;
+  let tradeTopMs = 0;
+  let jeonseTopMs = 0;
+  let recentTradeMs = 0;
+  let recentJeonseMs = 0;
+  let distributionMs = 0;
   const [
     dongNameResult,
     tradeTopResult,
@@ -57,7 +64,10 @@ export async function GET(
       SELECT bjd_name
       FROM bjd_polygon
       WHERE bjd_code = ${bjd}
-    `.execute(db),
+    `.execute(db).then((result) => {
+      dongNameMs = performance.now() - t0;
+      return result;
+    }),
     sql<TopComplexRow>`
       SELECT
         complex_name,
@@ -70,7 +80,10 @@ export async function GET(
       GROUP BY complex_name
       ORDER BY median_man DESC, tx_count_3m DESC
       LIMIT 5
-    `.execute(db),
+    `.execute(db).then((result) => {
+      tradeTopMs = performance.now() - t0;
+      return result;
+    }),
     sql<TopComplexRow>`
       SELECT
         complex_name,
@@ -84,7 +97,10 @@ export async function GET(
       GROUP BY complex_name
       ORDER BY median_man DESC, tx_count_3m DESC
       LIMIT 5
-    `.execute(db),
+    `.execute(db).then((result) => {
+      jeonseTopMs = performance.now() - t0;
+      return result;
+    }),
     sql<RecentTxRow>`
       SELECT
         complex_name,
@@ -96,7 +112,10 @@ export async function GET(
       WHERE bjd_code = ${bjd}
       ORDER BY contract_date DESC
       LIMIT 10
-    `.execute(db),
+    `.execute(db).then((result) => {
+      recentTradeMs = performance.now() - t0;
+      return result;
+    }),
     sql<RecentTxRow>`
       SELECT
         complex_name,
@@ -109,7 +128,10 @@ export async function GET(
         AND monthly_man = 0
       ORDER BY contract_date DESC
       LIMIT 10
-    `.execute(db),
+    `.execute(db).then((result) => {
+      recentJeonseMs = performance.now() - t0;
+      return result;
+    }),
     sql<DistributionRow>`
       SELECT
         mode,
@@ -121,8 +143,19 @@ export async function GET(
         confidence
       FROM mv_dong_stats
       WHERE bjd_code = ${bjd}
-    `.execute(db),
+    `.execute(db).then((result) => {
+      distributionMs = performance.now() - t0;
+      return result;
+    }),
   ]);
+  const dbMs = Math.max(
+    dongNameMs,
+    tradeTopMs,
+    jeonseTopMs,
+    recentTradeMs,
+    recentJeonseMs,
+    distributionMs,
+  );
 
   const bjdName = dongNameResult.rows[0]?.bjd_name;
   if (!bjdName) {
@@ -154,38 +187,56 @@ export async function GET(
 
   const recentTrades = recentTradesResult.rows.map(mapRecent);
   const recentJeonse = recentJeonseResult.rows.map(mapRecent);
+  const evalMs = performance.now() - t0 - dbMs;
 
-  return NextResponse.json({
-    bjd_code: bjd,
-    bjd_name: bjdName,
-    trade_top5: tradeTopResult.rows.map((row) => ({
-      complex_name: row.complex_name,
-      median_man: Math.round(Number(row.median_man)),
-      tx_count_3m: row.tx_count_3m,
-      evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
-    })),
-    jeonse_top5: jeonseTopResult.rows.map((row) => ({
-      complex_name: row.complex_name,
-      median_man: Math.round(Number(row.median_man)),
-      tx_count_3m: row.tx_count_3m,
-      evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
-    })),
-    recent_trades: recentTrades,
-    recent_jeonse: recentJeonse,
-    distributions: distributionResult.rows.map((row) => ({
-      mode: row.mode,
-      size_bucket: row.size_bucket,
-      p25_man: row.p25_man === null ? null : Math.round(Number(row.p25_man)),
-      median_man: row.median_man === null ? null : Math.round(Number(row.median_man)),
-      p75_man: row.p75_man === null ? null : Math.round(Number(row.p75_man)),
-      tx_count_3m: Number(row.tx_count_3m),
-      confidence: row.confidence,
-    })),
-    generated_at: new Date().toISOString(),
-    evidence: buildEvidence(
-      recentTrades.length + recentJeonse.length,
-      tradeTopResult.rows.length + jeonseTopResult.rows.length,
-      lastEvidenceDate,
-    ),
-  });
+  return NextResponse.json(
+    {
+      bjd_code: bjd,
+      bjd_name: bjdName,
+      trade_top5: tradeTopResult.rows.map((row) => ({
+        complex_name: row.complex_name,
+        median_man: Math.round(Number(row.median_man)),
+        tx_count_3m: row.tx_count_3m,
+        evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
+      })),
+      jeonse_top5: jeonseTopResult.rows.map((row) => ({
+        complex_name: row.complex_name,
+        median_man: Math.round(Number(row.median_man)),
+        tx_count_3m: row.tx_count_3m,
+        evidence: buildEvidence(row.tx_count_3m, 1, row.last_contract_date),
+      })),
+      recent_trades: recentTrades,
+      recent_jeonse: recentJeonse,
+      distributions: distributionResult.rows.map((row) => ({
+        mode: row.mode,
+        size_bucket: row.size_bucket,
+        p25_man: row.p25_man === null ? null : Math.round(Number(row.p25_man)),
+        median_man: row.median_man === null ? null : Math.round(Number(row.median_man)),
+        p75_man: row.p75_man === null ? null : Math.round(Number(row.p75_man)),
+        tx_count_3m: Number(row.tx_count_3m),
+        confidence: row.confidence,
+      })),
+      generated_at: new Date().toISOString(),
+      evidence: buildEvidence(
+        recentTrades.length + recentJeonse.length,
+        tradeTopResult.rows.length + jeonseTopResult.rows.length,
+        lastEvidenceDate,
+      ),
+      _timing: {
+        dong_name_ms: Number(dongNameMs.toFixed(1)),
+        trade_top_ms: Number(tradeTopMs.toFixed(1)),
+        jeonse_top_ms: Number(jeonseTopMs.toFixed(1)),
+        recent_trade_ms: Number(recentTradeMs.toFixed(1)),
+        recent_jeonse_ms: Number(recentJeonseMs.toFixed(1)),
+        distribution_ms: Number(distributionMs.toFixed(1)),
+        db_ms: Number(dbMs.toFixed(1)),
+        eval_ms: Number(evalMs.toFixed(1)),
+      },
+    },
+    {
+      headers: {
+        'Server-Timing': `dong_name;dur=${dongNameMs.toFixed(1)}, trade_top;dur=${tradeTopMs.toFixed(1)}, jeonse_top;dur=${jeonseTopMs.toFixed(1)}, recent_trade;dur=${recentTradeMs.toFixed(1)}, recent_jeonse;dur=${recentJeonseMs.toFixed(1)}, distribution;dur=${distributionMs.toFixed(1)}`,
+      },
+    },
+  );
 }
