@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
+## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
 
 Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.
 
