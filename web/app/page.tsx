@@ -418,7 +418,7 @@ function MapPageContent() {
   }, [selectedBjd]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh' }}>
+    <main style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh' }}>
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <MapView
           matched={matched}
@@ -504,7 +504,7 @@ function MapPageContent() {
 
       <RecentTickerBar items={recentItems} onSelectBjd={setSelectedBjd} />
       <Footer dataFreshness={affordable?.data_freshness ?? null} />
-    </div>
+    </main>
   );
 }
 
@@ -1049,18 +1049,18 @@ function Footer({
         color: '#444',
       }}
     >
-      <div style={{ color: '#777', marginBottom: 2 }}>
+      <div style={{ color: '#595959', marginBottom: 2 }}>
         <span style={{ color: '#a13030', fontWeight: 600 }}>면책:</span>{' '}
         이 사이트는 임장 후보를 색칠지도로 제시할 뿐, 매매 권유나 투자 자문이 아닙니다.
         결과는 RTMS 신고분 기준 통계로 단정문이 아닌 후보 제시이며, 실제 거래 판단은 사용자 본인 책임.
       </div>
       <div>
-        <span style={{ color: '#777' }}>데이터:</span>{' '}
+        <span style={{ color: '#595959' }}>데이터:</span>{' '}
         <a
           href="https://www.data.go.kr/data/15126474/openapi.do"
           target="_blank"
           rel="noreferrer noopener"
-          style={{ color: '#2d6da3', textDecoration: 'none' }}
+          style={{ color: '#1f5f92', textDecoration: 'underline', textUnderlineOffset: 2 }}
         >
           국토교통부 RTMS
         </a>
@@ -1069,12 +1069,12 @@ function Footer({
           href="https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30603"
           target="_blank"
           rel="noreferrer noopener"
-          style={{ color: '#2d6da3', textDecoration: 'none' }}
+          style={{ color: '#1f5f92', textDecoration: 'underline', textUnderlineOffset: 2 }}
         >
           V-World LSMD 법정동
         </a>
         {' · '}
-        <span style={{ color: '#777' }}>지도 © Mapbox/OpenStreetMap</span>
+        <span style={{ color: '#595959' }}>지도 © Mapbox/OpenStreetMap</span>
         {dataFreshness && (
           <span
             style={{
@@ -1368,6 +1368,24 @@ function SidePanel({
 }) {
   const top5 = mode === 'trade' ? details?.trade_top5 : details?.jeonse_top5;
   const isNarrow = useIsNarrow();
+  const dragStartYRef = useRef<number | null>(null);
+
+  const onDragHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isNarrow) return;
+    dragStartYRef.current = event.clientY;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onDragHandlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isNarrow || dragStartYRef.current === null) return;
+    const deltaY = event.clientY - dragStartYRef.current;
+    dragStartYRef.current = null;
+    if (deltaY >= 96) onClose();
+  };
+
+  const onDragHandlePointerCancel = () => {
+    dragStartYRef.current = null;
+  };
 
   const asideStyle: React.CSSProperties = isNarrow
     ? {
@@ -1429,14 +1447,29 @@ function SidePanel({
         {isNarrow && (
           <div
             aria-hidden
+            onPointerDown={onDragHandlePointerDown}
+            onPointerUp={onDragHandlePointerUp}
+            onPointerCancel={onDragHandlePointerCancel}
             style={{
-              width: 36,
-              height: 4,
-              borderRadius: 2,
-              background: '#d0d0d0',
+              width: 64,
+              height: 24,
               margin: '4px auto 10px',
+              cursor: 'grab',
+              touchAction: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-          />
+          >
+            <span
+              style={{
+                width: 36,
+                height: 4,
+                borderRadius: 2,
+                background: '#d0d0d0',
+              }}
+            />
+          </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <div>

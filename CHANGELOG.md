@@ -10,6 +10,31 @@
 
 ---
 
+## [v0.13.0] - 2026-05-11 - 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
+
+### 추가
+- `.claude/settings.json` + `.claude/hooks/ensure-worktree-env-local.sh` — Claude `SessionStart` 시 cwd가 `.claude/worktrees/*`이면 root checkout의 `web/.env.local`을 worktree `web/.env.local`로 symlink. 기존 파일이나 다른 symlink는 덮어쓰지 않고 skip.
+- `web/tests/e2e/ui-a11y.spec.ts` — DB/Mapbox 없이 API mock으로 `<main>` landmark, footer 출처 링크 underline, 모바일 SidePanel swipe-down 닫기를 검증.
+- `docs/blog/2026-05-11-vercel-preview-deploy-quota-rolling-24h.md` — Vercel Hobby preview deploy quota가 자정 리셋이 아니라 rolling 24h였던 현장 메모.
+- `docs/snapshots/21-a11y-mobile-sheet-polish/` — 접근성/모바일 sheet polish 시각 기록.
+
+### 변경
+- `web/app/page.tsx` — 최상위 wrapper를 `<main>`으로 바꾸고 footer 보조 텍스트 contrast 및 출처 링크 underline을 보정.
+- `web/app/page.tsx` — 모바일 SidePanel drag handle hit area를 넓히고 아래로 96px 이상 드래그하면 닫히도록 추가.
+- `web/next.config.js` — worktree에서 Next/Turbopack이 부모 checkout을 root로 오인하지 않도록 `turbopack.root`를 `web` 디렉터리로 고정.
+- `web/playwright.config.ts` — Playwright webServer가 테스트 baseURL과 같은 `3002` 포트로 dev server를 띄우도록 명시.
+
+### 검증
+- `python3 -m json.tool .claude/settings.json`
+- `printf ... | .claude/hooks/ensure-worktree-env-local.sh`
+- `cd web && ./node_modules/.bin/tsc --noEmit`
+- `git diff --check`
+- `cd web && npm run build`
+- `cd web && npx playwright test tests/e2e/ui-a11y.spec.ts`
+- `cd web && npx playwright test --workers=1` — 20 passed, 6 failed. 잔여 실패는 기존 데이터/test fragility: `/api/recent` 빈 `sigungu`, marquee ticker 안정 클릭, `전세` strict selector, SidePanel 최근 거래 heading expectation.
+
+---
+
 ## [v0.12.4] - 2026-05-11 - Neon storage 한도 모니터링
 
 ### 추가
