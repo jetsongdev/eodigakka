@@ -10,20 +10,20 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (2026-05-10 갱신, Stage 2b PR 작성 직후)**:
+**현재 우선순위 추천 (2026-05-11 갱신, v0.12.0 티커 머지 직후)**:
 
-🚨 **Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1·2a·2b 진행):
+✅ **Production 로딩 latency 1차 개선 완료** (2026-05-09 측정 → 2026-05-10 Stage 1·2a·2b·remote cache 수정 완료):
 
-| API | Cold (2026-05-09) | Stage 1 후 | Stage 2a 후 | Stage 2b 후 (목표) |
+| API | Cold (2026-05-09) | Stage 1 후 | Stage 2a 후 | Remote cache 수정 후 |
 |---|---|---|---|---|
-| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | 동일 | trade fresh **220ms** ✓ (1572→220, 7배 ↓) | **첫 호출 후 모두 ~ms** (cacheTag) |
-| `/api/polygons` | **10.53s · 1142kB** | **29ms · 141kB** ✓ | 동일 | 동일 (이미 정적, cacheLife('max')로 마이그레이션) |
-| `/api/dong/[bjd]/complexes` | warm 2.13s | 6-sub Server-Timing ✓ | 동일 | **첫 호출 후 모두 ~ms** (per-bjd cacheTag) |
+| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | 동일 | trade fresh **220ms** ✓ (1572→220, 7배 ↓) | warm **0.24~0.26s** ✓ |
+| `/api/polygons` | **10.53s · 1142kB** | **29ms · 141kB** ✓ | 동일 | CDN `x-vercel-cache: HIT` ✓ |
+| `/api/dong/[bjd]/complexes` | warm 2.13s | 6-sub Server-Timing ✓ | 동일 | warm **0.24~0.26s** ✓ |
 
-1. 🔴 **Stage 2b PR (진행 중, 본 워크트리)** — `cacheComponents: true` + 모든 API route `'use cache'` 마이그레이션 + `/api/revalidate` route 신설 + ETL workflow 03:00 cache invalidate webhook
-2. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — Stage 2b 머지 후 재진입
-3. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
-4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — Stage 2b로 latency 정상화 후 진행 의미 있음
+1. 🔴 **v0.12.0 최근 거래 티커 후속 검증** — `/api/recent` 50건·cache·footer 위 marquee·항목 클릭 → SidePanel 흐름 확인
+2. 🔵 **모바일 범례 floating chip** (A 섹션, 별도 세션 진행 중) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+3. 🔵 **사이드패널 평형 분포 히스토그램** — 분포 차트 다음 정보 밀도 개선
+4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — latency 정상화 후 진행 의미 있음
 5. ⚪ **검색 축 pivot brainstorming** (모드 → 금액 기준) — 임장 1회 후 재평가
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
@@ -167,7 +167,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
 - [x] **E 진단 완료** (2026-05-10, Stage 1) — `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade` **Seq Scan** 확정 (local Docker 5456 rows, 3ms). 기존 `(bjd_code, contract_date)` 복합 인덱스의 leading column이 `bjd_code`라 `MAX` 단독엔 활용 안 됨 (advisor 가설 정확). Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정 — (b)가 raw 인덱스 추가 없이 1행 SELECT라 더 깔끔
 - [x] **C 적용 (Stage 2a PR)** (2026-05-10) — freshness 쿼리 raw `MAX(contract_date)` Seq Scan → `etl_job_status` 1행 PK lookup. 옵션 (b) 채택. ETL이 03:00 갱신 후 max 박음, ALTER IF NOT EXISTS로 운영 DB 자동 마이그레이션. 로컬 검증: warm fresh **1572ms → 1.7ms (1000배 ↓)**. Production 측정은 deploy 후
-- [~] **D 적용 (Stage 2b PR #22, 2026-05-10)** — affordable·complexes에 `'use cache'` + `cacheTag('mv_dong_stats')` + `/api/revalidate` webhook + ETL workflow 통합. Production 측정 결과 **cache 미작동** (call마다 `_timing` 변동, `generated_at` 갱신, DB 매번 hit). 원인: `'use cache'` (default profile)는 Vercel serverless에서 in-memory only · ephemeral per instance — `'use cache: remote'`라야 Vercel Runtime Cache(persistent regional KV)에 저장됨. 폴리곤이 작동했던 건 `'use cache'` 덕분이 아니라 응답 헤더 `Cache-Control: public, max-age=86400`로 CDN edge cache가 잡아준 덕(`x-vercel-cache: HIT` 확인). 후속 PR(`fix/use-cache-remote`) 진행 중 — `'use cache'` → `'use cache: remote'` 3개 directive + `revalidateTag(tag, 'default')` → `revalidateTag(tag, { expire: 0 })` (webhook 권장 패턴). TIL `2026-05-10-vercel-use-cache-vs-remote.md`
+- [x] **D 적용 (Stage 2b PR #22 → fix PR #23, 2026-05-10)** — affordable·complexes에 cacheComponents + `/api/revalidate` webhook + ETL workflow 통합. 1차 Production 측정에서 `'use cache'` default profile이 Vercel serverless in-memory라 cache miss가 반복되는 문제를 확인했고, 후속 PR에서 `'use cache: remote'` + `revalidateTag(tag, { expire: 0 })`로 수정 완료. Preview 검증: `/api/affordable`·`/api/dong/.../complexes` warm 0.24~0.26s, `_timing` 5회 동일. TIL `2026-05-10-vercel-use-cache-vs-remote.md`
 
 ### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 
@@ -221,7 +221,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 **진척**:
 - [x] **A. Server-Timing 적용 (Stage 1 PR)** (2026-05-10) — 6개 sub-query(`dong_name`, `trade_top`, `jeonse_top`, `recent_trade`, `recent_jeonse`, `distribution`) 각각 분리 측정. `Promise.all` `.then()` 패턴으로 wall-clock 시점 기록. 응답 헤더 6 metric + body `_timing: { dong_name_ms, trade_top_ms, jeonse_top_ms, recent_trade_ms, recent_jeonse_ms, distribution_ms, db_ms (=max), eval_ms }`. dev 첫 호출에서 `jeonse_top=60.7, recent_trade=58.9` dominant 관찰 (local Docker라 prod와 다를 수 있음). Production deploy 후 warm 2.13s의 진짜 dominant 확정 → Stage 2 우선순위 결정. e2e 회귀 가드 추가
-- [ ] **B / E / C / F (Stage 2 PR)** — Stage 1 prod 측정 결과 보고 결정. B(인덱스 추가)는 EXPLAIN 결과 따라, E(cache)는 H-D와 동일 패턴(`'use cache'` + cacheTag), F(MV 신설)는 C(TOP5 PERCENTILE_CONT) dominant일 때만
+- [x] **E. Runtime Cache 적용 (Stage 2b PR #22 → fix PR #23, 2026-05-10)** — complexes per-bjd 응답을 `'use cache: remote'` + `cacheTag('mv_dong_stats', 'complexes-{bjd}')`로 캐시. Preview 검증 warm 0.24~0.26s.
+- [ ] **B / C / F (필요 시 후속)** — cache로 사용자 체감 latency는 1차 해결. ETL 후 첫 호출 cold 또는 특정 동 TOP5가 다시 문제로 보이면 EXPLAIN 기반 인덱스/MV 신설 검토
 
 ---
 

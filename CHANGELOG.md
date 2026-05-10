@@ -10,6 +10,16 @@
 
 ---
 
+## [Unreleased] - 최근 거래 티커 구 이름 fallback
+
+### 수정
+- `web/app/api/recent/route.ts` — 운영 `bjd_polygon.sigungu` 값이 비어 있어 최근 거래 티커 위치가 `·응암동`처럼 표시될 수 있던 문제를 보정. `bjd_code` 앞 5자리로 서울 25구 이름을 fallback 매핑해 `/api/recent` 응답의 `sigungu`를 항상 채운다.
+
+### 검증
+- Production `/api/recent` 응답 200·50건 반환 확인. 기존 배포 응답에서는 `sigungu` 50/50건이 빈 문자열임을 확인해 회귀 원인을 확정.
+
+---
+
 ## [v0.12.0] - 2026-05-11 - 강북 14구 최근 거래 50건 marquee 티커
 
 ### 추가
