@@ -134,8 +134,8 @@ footer 위 **독립 row**(absolute 아님). 지도 영역과 겹치지 않음. �
 }
 .ticker-track {
   display: inline-flex;
-  animation: ticker-scroll 120s linear infinite;
-  /* 50건 × 평균 240px ≈ 12,000px / 120s ≈ 100px/s — 천천히 읽기 좋은 속도 */
+  animation: ticker-scroll 172s linear infinite;
+  /* 50건 × 평균 240px ≈ 12,000px / 172s ≈ 70px/s — 더 천천히 읽기 좋은 속도 */
 }
 .ticker-bar:hover .ticker-track,
 .ticker-bar:focus-within .ticker-track {
