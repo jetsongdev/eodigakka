@@ -23,7 +23,7 @@ interface RecentTxData {
 }
 
 async function fetchRecentData(): Promise<RecentTxData> {
-  'use cache';
+  'use cache: remote';
   cacheLife({ revalidate: 3600 });
   cacheTag('mv_dong_stats');
 

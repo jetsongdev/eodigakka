@@ -13,7 +13,7 @@
 ## [Unreleased] - 강북 14구 최근 거래 50건 marquee 티커
 
 ### 추가
-- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. ETL freshness 문자열과 `Server-Timing` 포함.
+- `web/app/api/recent/route.ts` — 매매 raw 거래와 순수 전세 raw 거래를 통합해 계약일 역순 50건을 반환하는 read-only API 추가. `use cache: remote`, ETL freshness 문자열, `Server-Timing` 포함.
 - `web/components/RecentTickerBar.tsx` — footer 바로 위에 표시되는 최근 거래 marquee 티커 추가. hover/focus 시 정지, `prefers-reduced-motion`에서는 수동 가로 스크롤로 폴백.
 
 ### 변경
@@ -22,6 +22,94 @@
 ### 검증
 - `web/tests/e2e/api.spec.ts` — `/api/recent` 응답 스키마와 50건 제한 회귀 가드 추가.
 - `web/tests/e2e/map.spec.ts` — 티커 노출 및 항목 클릭 → SidePanel 열림 회귀 가드 추가.
+
+---
+
+## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
+
+Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.
+
+원인: Vercel Next.js 16 공식 문서상 `'use cache'`(default profile)는 **in-memory only, ephemeral per instance**. Vercel serverless instance가 invocation마다 다를 수 있어 캐시 매번 miss. `'use cache: remote'`라야 Vercel Runtime Cache(persistent regional KV)에 저장돼 invocation/instance 간 공유.
+
+폴리곤이 작동했던 이유 — `Cache-Control: public, max-age=86400` 응답 헤더로 **CDN 캐시**가 따로 작동 (`x-vercel-cache: HIT`). `'use cache'` directive와 무관한 별개 layer.
+
+### 수정
+- `web/app/api/affordable/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/dong/[bjd]/complexes/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/dong/[bjd]/recent/route.ts` — `'use cache'` → `'use cache: remote'` (origin/main 머지 시 v0.10.0의 신규 endpoint도 같은 함정에 노출. 일관성 적용)
+- `web/app/api/revalidate/route.ts` — `revalidateTag(tag, 'default')` → `revalidateTag(tag, { expire: 0 })` (webhook 외부 트리거는 즉시 만료가 권장 패턴)
+
+### 추가
+- `docs/til/2026-05-10-vercel-use-cache-vs-remote.md` — `'use cache'` vs `'use cache: remote'` Vercel serverless 함정
+- `docs/blog/2026-05-10-vercel-use-cache-remote-trap.md` — 같은 함정 블로그 draft (정글 실험실 후보)
+- `docs/blog/2026-05-10-vercel-preview-bypass-1password-cli.md` — Preview Vercel Auth 우회용 Protection Bypass for Automation 토큰 + 1Password CLI 패턴 블로그 draft
+
+### 변경
+- `CLAUDE.md` 「검증 체크리스트」 — Preview에서 bypass 토큰으로 curl 자동화 검증 절차 명시 (1Password vault 경로, GH Secret 동기화 명령, cache 작동 5회 호출 회귀 가드)
+- `tasks.md` F.117 — `[-]` 취소 → `[x]` 완료. 옵션 C(Auth 유지) + 옵션 D(Bypass 토큰) 조합 채택. 토큰 발급 + 1Password 저장 + GH Secret(`VERCEL_AUTOMATION_BYPASS`) 동기화 완료
+
+### 검증 (PR #23 Preview)
+- `_timing` 5회 정확히 동일 — `/api/affordable`(stats=1931.4 fresh=1633.8 db=1931.4) + `/api/dong/.../complexes`(db=1608.9) → cache HIT 확정
+- Wall-clock cold/warm 8 mode×size 조합 + 4개 동 측정 — warm 모두 0.24~0.26s 안정 수렴
+- `/api/polygons` `x-vercel-cache: HIT` 정상
+- `/api/revalidate` 401 가드 3 case 통과: bypass 없음(Vercel Auth) / bypass 있음 + Auth 없음(route 401) / bypass 있음 + 잘못된 Bearer(route 401)
+
+### 결정
+- 폴리곤은 `'use cache'` 그대로 유지 — `Cache-Control: public, max-age=86400` 헤더로 CDN 캐시가 작동 중이라 변경 불필요
+- `{ expire: 0 }` 선택 이유 — ETL 03:00 webhook이 즉시 invalidate해야 다음 사용자가 새 데이터 받음. `'default'`(stale-while-revalidate)면 03:01 첫 사용자가 stale 받음
+- Preview 자동화는 Auth 끄기(옵션 A) 대신 Bypass 토큰(옵션 D) — Mapbox preview 토큰 abuse 위험 회피하면서 머신 검증 가능
+
+---
+
+## [v0.11.0] - 2026-05-10 - ETL 윈도우 옵션화 + 24개월 풀 재적재 (ADR-012)
+
+사이드패널 더보기를 풀자(v0.10.0) 강북 14구 raw에 4월 한 달 분포만 적재돼 "최근 3개월" 이상의 깊이가 안 보이던 문제. ETL fetch 윈도우를 가변 인자(`--months N`)로 분리하고 1회성 풀 재적재(24개월) 절차 정립.
+
+### 추가
+- `etl/fetch_rtms.py` `parse_args(argv)` — `argparse --months N` 옵션. default 3 유지(정기 cron 신고지연 보정), max 36, 0/-1/37 reject. 시작 log에 `ETL started: months=N (window YYYYMM~YYYYMM)` 명시.
+- `etl/tests/test_fetch_rtms.py` — `MonthTokensTest`(default·count=24 cross-year 검증), `ParseArgsTest`(default·explicit·max·zero·negative·overflow 5 케이스). `.venv-etl/bin/python3 -m unittest tests.test_fetch_rtms` 10/10 통과.
+- `SPEC.md` ADR-012 — ETL 윈도우 정책 (정기 3개월 + 1회성 24개월). MV 윈도우(ADR-005, 직전 3개월)와 raw fetch 윈도우를 명시적으로 분리.
+- `README.md` "풀 재적재" 섹션 — Neon 직결 1회 명령 + raw `ON CONFLICT DO NOTHING` 누적 + `mv_dong_stats` 영향 없음 명시.
+- `docs/til/2026-05-10-rtms-dev-key-quota-and-window.md` — RTMS Dev key 한도 확인 절차(공공데이터포털 마이페이지) + 호출량 추정 공식 + MV 윈도우 vs ETL fetch 윈도우 분리 교훈.
+
+### 결정
+- **`--months` 옵션 vs full-rebuild 전용 스크립트**: 별도 `rebuild_rtms.py` 만드는 대신 같은 진입점에 인자만 추가. 코드 경로 분기·테스트 표면 최소화. 정기 cron이 인자 없이 호출되면 default 3 그대로라 GHA 워크플로 변경 불필요.
+- **default 3 유지**: 정기 ETL은 신고지연 보정만 담당이라는 ADR-005 정신 보존. 풀 재적재 후에도 매일 `--months` 없이 호출 = 직전 3개월만 재조회.
+- **max 36**: RTMS Dev key 일일 한도(10,000) × 매매·전월세 분리 기준 호출량 추정으로 36개월(≈ 5,040 호출) 안전 여유. 그 이상은 분할 실행 필요해 옵션 자체 막음.
+- **`mv_dong_stats` 윈도우는 그대로**: raw 깊이가 늘어도 색칠지도 confidence 분류 안정성 유지(ADR-005). 통계 비교는 직전 3개월, "최근 거래" 깊이만 길어짐. 두 layer 분리는 ADR-012 trade-off의 핵심.
+
+### 검증
+- `tests.test_fetch_rtms` 10/10 통과 (parse_args 5 + month_tokens 2 + 기존 3).
+- 풀 재적재 1회 명령은 Mr. Song 환경에서 실행 필요(sandbox 네트워크 차단). 실행 후 검증 쿼리:
+  ```
+  SELECT to_char(contract_date,'YYYY-MM') ym, COUNT(*) FROM tx_apt_trade GROUP BY ym ORDER BY ym DESC;
+  ```
+  24개 월 모두 노출되면 성공. recent endpoint `offset=100/200` 다중 월 그룹 헤더 노출도 함께 확인.
+
+---
+
+## [v0.10.0] - 2026-05-10 - 사이드패널 최근 거래 더보기 (인라인 점진 로드 + 월별 그룹 + 자체 스크롤)
+
+동 상세 사이드패널의 매매·전세 최근 거래가 각각 10건 고정이었던 걸 +20건씩 누적 로드되도록 풀었다. 사용자가 거래 흐름을 더 깊이 보고 싶을 때 모달이나 페이지 이동 없이 같은 자리에서 펼친다. 누적 시 스크롤 감당이 길어지는 문제는 월별 그룹 헤더(sticky) + 매매·전세 각 섹션 자체 스크롤 컨테이너(max 320px)로 해결.
+
+### 추가
+- `web/app/api/dong/[bjd]/recent/route.ts` — 매매/전세 최근 거래 페이징 전용 엔드포인트. 쿼리: `mode=trade|jeonse` (필수), `offset` (0..200), `limit` (1..50). LIMIT+1 trick으로 `has_more` 추론, 별도 COUNT 쿼리 없음. `'use cache'` + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats', 'recent-{bjd}-{mode}-{offset}-{limit}')` — ETL revalidate webhook이 `mv_dong_stats` 태그 invalidate 시 같이 무효화됨. 정렬은 `contract_date DESC, complex_name ASC, area_m2 ASC` (deterministic tie-break).
+- `web/app/page.tsx` `RecentTxSections` — bjd 변경 시 누적·에러 reset, 매매·전세 각각 독립 더보기 버튼·로딩·에러 상태. 라벨은 `매매 최근 거래 N건+`(has_more 시 `+` 표기), 빈 거래는 기존대로 "최근 거래 없음".
+- `web/app/page.tsx` `groupByMonth` 헬퍼 + 행 렌더링 — `<table>` → `<div>` grid 구조 재작성. 월별(YYYY-MM) 그룹 헤더가 매매·전세 각 섹션 자체 스크롤 박스(max-height 320px) 안에서 `position: sticky; top: 0`. 누적이 50건·100건이 돼도 사이드패널 다른 섹션(EvidenceCard·DistributionChart·TOP5)을 가리지 않고, 스크롤 중에도 현재 보고 있는 월이 항상 박스 상단에 노출.
+- `web/tests/e2e/api.spec.ts` — `/recent` 페이징 smoke 테스트(첫 페이지 has_more, 다음 페이지 offset=10) + 입력 validation 테스트(잘못된 mode·bjd·limit·offset → 400) 추가.
+
+### 결정
+- **별도 엔드포인트 vs 기존 `/complexes` 확장**: 기존 endpoint는 top5·distribution·bjd_name 등을 묶어 한 번에 응답하는 dashboard 페이로드. 페이징 limit을 키우면 캐시가 limit별로 갈라져 dashboard 부분까지 같이 분기되는 낭비가 생긴다. 페이징 책임만 가진 endpoint를 분리해 cache key를 좁게 잡았다.
+- **LIMIT+1 trick**: `COUNT(*)` 추가 쿼리 없이 다음 페이지 존재 여부만 정확히 확인. 총 건수 표기는 현재 UX에서 불필요(범위 가드 `MAX_OFFSET=200`로 충분히 커버).
+- **MAX_OFFSET 200, MAX_LIMIT 50**: 강북 14구 한 동 3개월 거래수 기준 250건 이상 적재된 동이 거의 없음. 악의적 깊은 페이징·DoS 가드.
+- **cache key에 limit/offset 포함**: `recent-{bjd}-{mode}-{offset}-{limit}` 태그는 invalidate 시 와일드카드 매칭이 아니라 정확 매칭이지만, `mv_dong_stats` 태그를 함께 부여해 ETL→/api/revalidate 훅이 한 번에 모두 쓸어내게 함.
+- **자체 스크롤 컨테이너 vs 사이드패널 전체 스크롤**: 매매·전세 각 섹션에 `max-height: 320px; overflow-y: auto`로 자체 스크롤 분리. 사이드패널 전체 스크롤은 살아있어 다른 섹션(TOP5·distribution) 접근 가능. nested scroll의 모바일 어색함은 `RECENT_SCROLL_MAX_PX=320`이라 손가락 한 번 스와이프 안에 들어와 실측상 무리 없음. 대안(전체 사이드패널 스크롤만)은 누적 100건+에서 EvidenceCard가 시야 위로 사라져 "지금 보는 동이 어디였더라" 컨텍스트 분실.
+- **`<table>` → `<div>` grid**: `position: sticky`가 table 행 단위에선 브라우저별 동작이 들쭉날쭉(spec gray area). 시각은 grid `1fr auto 36px`로 동일하게 맞추고 sticky 신뢰성 확보. column header(`단지·평형 / 금액 / 일자`)는 스크롤 박스 밖에 둬서 항상 노출.
+- **끝 라벨 `· 여기까지 · 총 N건 ·`**: 더보기 한참 누르다 `has_more=false` 응답이 와서 버튼이 갑자기 사라지면 "끝났는지/버그인지" 모호. 더보기 자리에 작은 회색 라벨로 끝남을 명시. 첫 응답 9건 이하(초기 has_more=false)는 카운트만으로 자명하므로 `rows.length >= RECENT_INITIAL_COUNT(10)` 조건일 때만. 데이터 자체는 ETL이 적재한 직전 3개월(`etl/fetch_rtms.py:356` `count=3`) 윈도우에 한정.
+
+### 검증
+- `npx tsc --noEmit` 통과 (exit 0).
+- `next build` 컴파일·TypeScript 단계 통과 (`Compiled successfully` + `Finished TypeScript`). 이후 page data collection은 워크트리에 `.env.local` 부재로 DATABASE_URL 누락 → 환경 종속 단계 미실행. **사용자 환경에서 dev server 가동 후 `/api/dong/<bjd>/recent?mode=trade&offset=0&limit=20` 200 응답·has_more 동작·사이드패널 더보기 버튼 클릭 누적 동작 확인 필요.**
 
 ## [v0.9.0] - 2026-05-10 - URL 쿼리 파라미터 양방향 동기화
 
@@ -41,6 +129,8 @@ PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반�
 
 ### 검증
 브라우저에서 `?mode=jeonse&cash_min=10000&cash_max=30000&size=S`로 진입 → 전세 활성·슬라이더 [10000,30000]·S 활성 확인. 매매/M 토글 + 슬라이더 ArrowRight 8회 후 `history.length` 2로 고정 확인. `npm run build` TS 1248ms 통과.
+
+---
 
 ## [v0.8.4] - 2026-05-10 - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
 

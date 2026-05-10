@@ -1,5 +1,5 @@
 ---
-index: 15
+index: 17
 slug: recent-tx-ticker
 date: 2026-05-10
 phase: "Phase 1 — market freshness ticker"
@@ -7,7 +7,7 @@ git_sha: c3bca44 (dirty; visual preview sha 7bfc821)
 viewport: 1920x1080
 ---
 
-# 15 — footer 위 강북 14구 최근 거래 ticker
+# 17 — footer 위 강북 14구 최근 거래 ticker
 
 PR #26의 강북 14구 최근 거래 50건 marquee ticker 시각 기록. `c3bca44`는 tasks 문서만 추가한 HEAD이고 Vercel preview 배포가 취소되어, UI가 동일한 직전 READY 배포 `7bfc821`을 캡처했다.
 

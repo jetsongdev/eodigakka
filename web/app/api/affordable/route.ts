@@ -36,7 +36,7 @@ async function fetchAffordableData(
   statsMode: 'TRADE' | 'JEONSE',
   size: 'S' | 'M' | 'L' | 'all',
 ): Promise<AffordableData> {
-  'use cache';
+  'use cache: remote';
   cacheLife({ revalidate: 3600 });
   cacheTag('mv_dong_stats');
 

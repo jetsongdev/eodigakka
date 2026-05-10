@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Next.js 16 cacheComponents 모드: profile 인자 필수.
-  // 'default'로 호출해 cacheLife({ revalidate: 3600 }) 같은 일반 profile 매칭
-  revalidateTag(tag, 'default');
+  // webhook(외부 트리거)은 { expire: 0 }로 즉시 만료 — 다음 요청이 stale 응답 받지 않게.
+  revalidateTag(tag, { expire: 0 });
 
   return NextResponse.json({
     revalidated: true,

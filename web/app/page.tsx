@@ -1266,6 +1266,7 @@ function SidePanel({
       )}
 
       <RecentTxSections
+        bjd={bjdCode}
         trades={details?.recent_trades}
         jeonse={details?.recent_jeonse}
         loading={loading}
@@ -1502,24 +1503,137 @@ const MODE_ACCENT: Record<QueryMode, string> = {
   jeonse: '#5577c8',
 };
 
+const RECENT_INITIAL_COUNT = 10;
+const RECENT_PAGE_SIZE = 20;
+// 누적 30건 넘어가면 자체 스크롤 — 그룹 sticky 컨텍스트 + 사이드패널 전체 스크롤 분리
+const RECENT_SCROLL_MAX_PX = 320;
+const RECENT_GRID_COLUMNS = '1fr auto 36px';
+
+interface RecentMoreResponse {
+  rows: RecentTransaction[];
+  has_more: boolean;
+}
+
+function groupByMonth(
+  rows: RecentTransaction[],
+): Array<{ ym: string; rows: RecentTransaction[] }> {
+  const map = new Map<string, RecentTransaction[]>();
+  for (const r of rows) {
+    const ym = r.contract_date.slice(0, 7); // "YYYY-MM"
+    const bucket = map.get(ym);
+    if (bucket) bucket.push(r);
+    else map.set(ym, [r]);
+  }
+  // contract_date DESC 보장 (서버 정렬) → Map 삽입 순서가 최신 월 우선
+  return Array.from(map.entries()).map(([ym, rows]) => ({ ym, rows }));
+}
+
 function RecentTxSections({
+  bjd,
   trades,
   jeonse,
   loading,
 }: {
+  bjd: string;
   trades: RecentTransaction[] | undefined;
   jeonse: RecentTransaction[] | undefined;
   loading: boolean;
 }) {
-  const sections = [
-    { label: '매매 최근 10건', rows: trades ?? [], accent: MODE_ACCENT.trade },
-    { label: '전세 최근 10건', rows: jeonse ?? [], accent: MODE_ACCENT.jeonse },
+  const [extraTrades, setExtraTrades] = useState<RecentTransaction[]>([]);
+  const [extraJeonse, setExtraJeonse] = useState<RecentTransaction[]>([]);
+  const [tradesHasMore, setTradesHasMore] = useState(false);
+  const [jeonseHasMore, setJeonseHasMore] = useState(false);
+  const [tradesLoadingMore, setTradesLoadingMore] = useState(false);
+  const [jeonseLoadingMore, setJeonseLoadingMore] = useState(false);
+  const [tradesError, setTradesError] = useState<string | null>(null);
+  const [jeonseError, setJeonseError] = useState<string | null>(null);
+
+  // bjd 변경 시 누적·에러 reset (loading 도중 bjd 바뀌어도 새 동 데이터 깨끗하게)
+  useEffect(() => {
+    setExtraTrades([]);
+    setExtraJeonse([]);
+    setTradesError(null);
+    setJeonseError(null);
+  }, [bjd]);
+
+  // 첫 응답 길이로 has_more 추정 — RECENT_INITIAL_COUNT(10)건 미만이면 더 없음 확정
+  useEffect(() => {
+    if (trades) setTradesHasMore(trades.length >= RECENT_INITIAL_COUNT);
+  }, [trades]);
+  useEffect(() => {
+    if (jeonse) setJeonseHasMore(jeonse.length >= RECENT_INITIAL_COUNT);
+  }, [jeonse]);
+
+  async function loadMore(mode: 'trade' | 'jeonse') {
+    const isTrade = mode === 'trade';
+    const baseRows = (isTrade ? trades : jeonse) ?? [];
+    const extraRows = isTrade ? extraTrades : extraJeonse;
+    const offset = baseRows.length + extraRows.length;
+
+    if (isTrade) {
+      setTradesLoadingMore(true);
+      setTradesError(null);
+    } else {
+      setJeonseLoadingMore(true);
+      setJeonseError(null);
+    }
+
+    try {
+      const res = await fetch(
+        `/api/dong/${bjd}/recent?mode=${mode}&offset=${offset}&limit=${RECENT_PAGE_SIZE}`,
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as RecentMoreResponse;
+      if (isTrade) {
+        setExtraTrades((prev) => [...prev, ...data.rows]);
+        setTradesHasMore(data.has_more);
+      } else {
+        setExtraJeonse((prev) => [...prev, ...data.rows]);
+        setJeonseHasMore(data.has_more);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isTrade) setTradesError(msg);
+      else setJeonseError(msg);
+    } finally {
+      if (isTrade) setTradesLoadingMore(false);
+      else setJeonseLoadingMore(false);
+    }
+  }
+
+  const sections: Array<{
+    mode: 'trade' | 'jeonse';
+    label: string;
+    rows: RecentTransaction[];
+    accent: string;
+    hasMore: boolean;
+    loadingMore: boolean;
+    error: string | null;
+  }> = [
+    {
+      mode: 'trade',
+      label: '매매',
+      rows: [...(trades ?? []), ...extraTrades],
+      accent: MODE_ACCENT.trade,
+      hasMore: tradesHasMore,
+      loadingMore: tradesLoadingMore,
+      error: tradesError,
+    },
+    {
+      mode: 'jeonse',
+      label: '전세',
+      rows: [...(jeonse ?? []), ...extraJeonse],
+      accent: MODE_ACCENT.jeonse,
+      hasMore: jeonseHasMore,
+      loadingMore: jeonseLoadingMore,
+      error: jeonseError,
+    },
   ];
 
   return (
     <div style={{ marginTop: 14 }}>
       {sections.map((section, sectionIndex) => (
-        <section key={section.label} style={{ marginTop: sectionIndex === 0 ? 0 : 12 }}>
+        <section key={section.mode} style={{ marginTop: sectionIndex === 0 ? 0 : 12 }}>
           <h4
             style={{
               marginTop: 0,
@@ -1540,10 +1654,10 @@ function RecentTxSections({
                 display: 'inline-block',
               }}
             />
-            <span>{section.label}</span>
+            <span>{section.label} 최근 거래</span>
             {!loading && (
               <span style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>
-                {section.rows?.length ?? 0}건
+                {section.rows.length}건{section.hasMore ? '+' : ''}
               </span>
             )}
           </h4>
@@ -1559,29 +1673,123 @@ function RecentTxSections({
             ) : section.rows.length === 0 ? (
               <div style={{ color: '#888', fontSize: 12 }}>최근 거래 없음</div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #e8e8e8', textAlign: 'left' }}>
-                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>단지·평형</th>
-                    <th style={{ padding: '4px 2px', fontWeight: 600, textAlign: 'right' }}>금액</th>
-                    <th style={{ padding: '4px 2px', fontWeight: 600 }}>일자</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {section.rows.map((tx, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                      <td style={{ padding: '4px 2px' }}>
-                        {tx.complex_name}
-                        <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
-                      </td>
-                      <td style={{ padding: '4px 2px', textAlign: 'right' }}>
-                        {(tx.amount_man / 10000).toFixed(1)}억
-                      </td>
-                      <td style={{ padding: '4px 2px', color: '#888' }}>{tx.contract_date.slice(5)}</td>
-                    </tr>
+              <>
+                <div
+                  role="row"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: RECENT_GRID_COLUMNS,
+                    gap: 6,
+                    padding: '4px 2px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderBottom: '1px solid #e8e8e8',
+                  }}
+                >
+                  <span>단지·평형</span>
+                  <span style={{ textAlign: 'right' }}>금액</span>
+                  <span>일자</span>
+                </div>
+                <div
+                  style={{
+                    maxHeight: RECENT_SCROLL_MAX_PX,
+                    overflowY: 'auto',
+                    // sticky 컨텍스트 = 이 박스. 그룹 헤더가 박스 상단에 고정.
+                  }}
+                >
+                  {groupByMonth(section.rows).map((g) => (
+                    <div key={g.ym}>
+                      <div
+                        role="rowheader"
+                        style={{
+                          position: 'sticky',
+                          top: 0,
+                          zIndex: 1,
+                          background: 'rgba(248,248,248,0.96)',
+                          backdropFilter: 'blur(2px)',
+                          WebkitBackdropFilter: 'blur(2px)',
+                          padding: '3px 4px',
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: '#666',
+                          letterSpacing: 0.2,
+                          borderBottom: '1px solid #e8e8e8',
+                        }}
+                      >
+                        {g.ym} · {g.rows.length}건
+                      </div>
+                      {g.rows.map((tx, i) => (
+                        <div
+                          key={`${g.ym}-${i}`}
+                          role="row"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: RECENT_GRID_COLUMNS,
+                            gap: 6,
+                            padding: '4px 2px',
+                            fontSize: 11,
+                            borderBottom: '1px solid rgba(0,0,0,0.04)',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tx.complex_name}
+                            <span style={{ color: '#999' }}> · {tx.area_m2.toFixed(0)}㎡</span>
+                          </span>
+                          <span style={{ textAlign: 'right' }}>
+                            {(tx.amount_man / 10000).toFixed(1)}억
+                          </span>
+                          <span style={{ color: '#888' }}>{tx.contract_date.slice(5)}</span>
+                        </div>
+                      ))}
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+                {section.error && (
+                  <div style={{ marginTop: 6, color: '#c0392b', fontSize: 11 }}>
+                    더보기 실패: {section.error}
+                  </div>
+                )}
+                {section.hasMore ? (
+                  <button
+                    type="button"
+                    onClick={() => loadMore(section.mode)}
+                    disabled={section.loadingMore}
+                    aria-label={`${section.label} 거래 ${RECENT_PAGE_SIZE}건 더 보기`}
+                    style={{
+                      marginTop: 6,
+                      width: '100%',
+                      padding: '6px 10px',
+                      fontSize: 11,
+                      color: '#444',
+                      background: 'rgba(255,255,255,0.7)',
+                      border: '1px solid #d8d8d8',
+                      borderRadius: 4,
+                      cursor: section.loadingMore ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {section.loadingMore
+                      ? '불러오는 중...'
+                      : `더보기 (+${RECENT_PAGE_SIZE}건)`}
+                  </button>
+                ) : (
+                  // 더보기 한참 누르다 버튼이 갑자기 사라지면 "끝났는지/버그인지" 모호 — 명시.
+                  // 첫 응답 9건 이하(초기 has_more=false)는 카운트만으로도 충분하니 라벨 생략.
+                  section.rows.length >= RECENT_INITIAL_COUNT && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        padding: '4px 0',
+                        textAlign: 'center',
+                        fontSize: 10,
+                        color: '#aaa',
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      · 여기까지 · 총 {section.rows.length}건 ·
+                    </div>
+                  )
+                )}
+              </>
             )}
           </div>
         </section>
