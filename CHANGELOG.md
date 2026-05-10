@@ -10,6 +10,25 @@
 
 ---
 
+## [v0.9.0] - 2026-05-10 - URL 쿼리 파라미터 양방향 동기화
+
+PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반영. 새로고침·딥링크 공유·외부 진입 시 슬라이더·토글 상태 그대로 복원. Phase 1 임장 후보 목록을 URL로 주고받을 수 있게 됨.
+
+### 추가
+- `web/app/page.tsx` — `useRouter`/`usePathname`/`useSearchParams` 도입. 초기 상태는 URL → `parseAffordableQuery`로 복원, mode/size 토글은 즉시 `router.replace`, cash_min/cash_max는 300ms debounce 후 `replace`. cash-only 변화 판별용 `prevQueryRef` 추가.
+- `MapPage` 본체를 `MapPageContent`로 분리하고 `<Suspense>` 래퍼 추가 — Next.js 16의 `useSearchParams` 빌드 경고 해소.
+
+### 변경
+- `web/lib/filter.ts` `parseAffordableQuery` — defaults 인자 추가(기존 호출자 영향 없음). 클라이언트 측 파싱 시 `DEFAULT_QUERY` 주입해 URL 미지정 필드만 기본값 폴백.
+
+### 결정
+- **`router.replace` only, push 안 함**: 슬라이더 드래그·토글마다 history 폭주 방지. 뒤로가기로 이전 슬라이더 위치 되돌리는 동선은 deep link 외에는 거의 없다고 판단.
+- **300ms debounce는 cash 슬라이더에만**: mode/size 토글은 단발성이라 즉시 반영. cash는 드래그 중 매 frame fire 가능 → debounce 필수.
+- **native `history.replaceState` 미선택**: Next.js App Router의 `useSearchParams`는 React state로 관리되므로 native API로 URL만 바꾸면 다음 렌더에서 hook 결과가 동기화 안 됨. `router.replace`는 무거운 라우팅 트리거 없이 search params만 갱신.
+
+### 검증
+브라우저에서 `?mode=jeonse&cash_min=10000&cash_max=30000&size=S`로 진입 → 전세 활성·슬라이더 [10000,30000]·S 활성 확인. 매매/M 토글 + 슬라이더 ArrowRight 8회 후 `history.length` 2로 고정 확인. `npm run build` TS 1248ms 통과.
+
 ## [v0.8.4] - 2026-05-10 - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
 
 Stage 2a(v0.8.3)로 freshness 쿼리는 fresh=220ms로 직격됐지만 Production cold에선 stats(`mv_dong_stats` JOIN) 쿼리가 새 dominant이 됨(cold 446ms~1711ms). Stage 2b는 응답 자체를 edge cache에 박는 마지막 한 방.
