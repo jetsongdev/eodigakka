@@ -45,3 +45,14 @@ CREATE TABLE IF NOT EXISTS bjd_polygon (
 );
 CREATE INDEX IF NOT EXISTS bjd_polygon_geom_idx
   ON bjd_polygon USING GIST (geom);
+
+CREATE TABLE IF NOT EXISTS etl_job_status (
+  job_name                  TEXT        PRIMARY KEY,
+  last_started_at           TIMESTAMPTZ,
+  last_succeeded_at         TIMESTAMPTZ,
+  mv_refreshed_at           TIMESTAMPTZ,
+  last_error                TEXT,
+  last_contract_date_trade  DATE,
+  last_contract_date_rent   DATE,
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

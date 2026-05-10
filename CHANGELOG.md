@@ -10,6 +10,31 @@
 
 ---
 
+## [Unreleased] - perf(web): /api/affordable freshness 쿼리 우회 — etl_job_status 컬럼화 (Stage 2a)
+
+Stage 1(v0.8.2) Production 측정에서 `/api/polygons` cold 10.53s → 29ms는 직격됐지만 `/api/affordable` cold 3.46s 중 fresh=1572ms 부분은 그대로. Stage 2a는 D 옵션(b) 적용 — `MAX(contract_date) FROM tx_apt_trade/rent` raw 풀스캔을 `etl_job_status` 1행 SELECT로 우회. ETL이 03:00 갱신 끝나고 max_contract_date를 status 테이블에 기록하면 API는 그 값만 읽음.
+
+### 변경
+- `etl/fetch_rtms.py` `update_etl_status` — `last_contract_date_trade: date | None` / `last_contract_date_rent: date | None` keyword-only 파라미터 추가. `set_clauses` + `params_list` 재구성으로 None 아닐 때만 SET. 기존 호출처(started/succeeded/refreshed/error)는 시그니처 호환 유지
+- `etl/fetch_rtms.py` `main()` success path — `refresh_materialized_views` 호출 직전에 `SELECT MAX(contract_date) FROM tx_apt_trade/rent` 두 쿼리 실행해 `update_etl_status`에 전달. ETL 한 트랜잭션 안에서 raw INSERT 끝난 직후 측정이라 일관성 보장
+- `etl/fetch_rtms.py` `ensure_etl_status_table` — `ALTER TABLE etl_job_status ADD COLUMN IF NOT EXISTS last_contract_date_trade DATE, ADD COLUMN IF NOT EXISTS last_contract_date_rent DATE` idempotent 마이그레이션. 기존 운영 DB(Neon)는 다음 cron firing(2026-05-11 03:00 KST)에 자동 적용
+- `db/schema.sql` — 이전엔 ETL 동적 생성에만 의존하던 `etl_job_status` 테이블 정의를 schema에 명시. 신규 환경 부트스트랩은 `db/schema.sql`로 처음부터 박힘
+- `web/lib/db.ts` `EtlJobStatusTable` — 두 컬럼 타입 추가 (`string | null`, DATE는 Kysely에서 ISO 8601 문자열로 매핑)
+- `web/app/api/affordable/route.ts` freshness 쿼리 — `MAX(contract_date) FROM tx_apt_trade/rent` Seq Scan 풀스캔 → `SELECT last_contract_date_{trade|rent} FROM etl_job_status WHERE job_name = 'rtms_phase1'` 1행 PK lookup으로 교체. Promise.all 병렬 구조 그대로
+- `etl/tests/test_fetch_rtms.py` `UpdateEtlStatusTest` — `last_contract_date_*` 인자 전달 시 SQL에 `last_contract_date_trade = %s` 박히고 params에 `date(...)` 들어가는지 가드 + 인자 None일 때 SQL에 안 박히는지 가드
+
+### 결정
+- **옵션 (b) 채택** — advisor 검토 결과 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status` 컬럼화 둘 중 후자. raw 테이블 인덱스 추가 없이 1행 SELECT라 더 깔끔. EXPLAIN ANALYZE에서 raw `MAX(contract_date)`가 Seq Scan 확정(local Docker 5456 rows · 3ms)이지만 Neon 콜드+RTT 비용은 큰데, 1행 PK lookup은 콜드에서도 ~50ms 안 넘김
+- **Schema 선언적 SoT 회복** — 기존엔 ETL 동적 생성에만 의존 → 신규 환경 부트스트랩 시 schema.sql만으론 etl_job_status 못 만들었음. 이번 commit으로 SoT 명시. 운영 DB는 ETL의 ALTER가 자동 마이그레이션
+- **Stage 2b는 별도 PR** — cache layer(affordable `'use cache'` + cacheTag, complexes per-bjd cache, ETL→/api/revalidate webhook, complexes 측정 방법론 fix)는 영역이 다르고 Vercel env(REVALIDATE_SECRET) 사전 등록 필요해 분리
+
+### 검증
+- `python -m unittest etl.tests.test_fetch_rtms` 3/3 그린(기존 1 + 새 2)
+- `npm run build` 그린, TS 타입 변경 통과
+- 로컬 docker DB ALTER + UPDATE 적용 후 dev 서버 응답: 27 dongs 정상, `data_freshness: "RTMS 2026-05-03 신고분까지"` 정상
+- Server-Timing fresh: cold 53.1ms / **warm 1.7ms** (기존 Production warm fresh=1572ms 대비 1000배 ↓)
+- e2e `tests/e2e/api.spec.ts` 6/6 그린 — `/api/affordable` `data_freshness` 포맷 회귀 가드 통과
+
 ## [v0.8.2] - 2026-05-10 - perf(web): /api/polygons 정적화 + complexes Server-Timing 측정 도구 (Stage 1)
 
 Production cold latency 진단 후 H+I+J 묶음 PR을 두 단계로 분할. 이번이 **Stage 1**: 측정 도구 + polygons 정적화. cache layer는 Stage 2.

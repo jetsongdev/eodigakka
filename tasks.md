@@ -10,18 +10,18 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (2026-05-10 갱신, Stage 1 PR 작성 직후)**:
+**현재 우선순위 추천 (2026-05-10 갱신, Stage 2a PR 작성 직후)**:
 
-🚨 **최우선 — Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1 진행):
+🚨 **최우선 — Production 로딩 latency 개선** (2026-05-09 측정 → 2026-05-10 Stage 1·2a 진행):
 
-| API | Cold | Warm | Note |
-|---|---|---|---|
-| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | ~900ms | Neon 콜드 + Vercel 함수 콜드. Stage 2 대상 |
-| `/api/polygons` | **10.53s · 1142kB** | 170ms | Stage 1에서 force-static + simplify로 직격 — deploy 후 측정 필요 |
-| `/api/dong/[bjd]/complexes` | (미측정) | **2.13s · 1.2kB** | Stage 1에서 6 sub-query Server-Timing 박음 — deploy 후 dominant 확정 |
+| API | Cold (2026-05-09) | Stage 1 후 | Stage 2a 후 (목표) | 비고 |
+|---|---|---|---|---|
+| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | 동일 | **fresh ~50ms** 기대 | Stage 2a로 fresh 1572ms → ~50ms (cold), warm 1.7ms 검증 완료 |
+| `/api/polygons` | **10.53s · 1142kB** | **29ms · 141kB** ✓ | 동일 | Stage 1 v0.8.2로 직격 |
+| `/api/dong/[bjd]/complexes` | warm 2.13s | Server-Timing 박음 ✓ | Stage 2b 대상 | 6 sub-query 모두 ~1.6s 동시 종료 — Neon 콜드 + 6 RTT dominant. cache 답 |
 
-1. 🔴 **Stage 1 PR (진행 중, 본 워크트리)** — polygons force-static + simplify(precision 5) + complexes/polygons Server-Timing 측정 도구. 저위험·고가치 단독 ship해 baseline 확보
-2. 🔴 **Stage 2 PR (다음)** — affordable edge cache(`'use cache'` + cacheTag/updateTag) + complexes per-bjd cache + freshness 쿼리 우회 (EXPLAIN으로 Seq Scan 확정 → 단일 contract_date 인덱스 또는 etl_job_status 컬럼화). ETL workflow에 Vercel deploy hook curl POST 추가해 03:00 갱신 후 cache invalidate. 임장 검증·외부 공유 전 필수 통과
+1. 🔴 **Stage 2a PR (진행 중, 본 워크트리)** — etl_job_status 컬럼화로 freshness 쿼리 우회. fresh 1000배 ↓ 검증 완료
+2. 🔴 **Stage 2b PR (다음)** — affordable `'use cache'` + cacheTag + complexes per-bjd cache + ETL→/api/revalidate webhook + complexes 측정 방법론 fix. Vercel env에 `REVALIDATE_SECRET` 사전 등록 필요. 임장 검증·외부 공유 전 필수 통과
 3. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — Stage 2 처리 후 재진입
 4. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
 5. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — Stage 2로 latency 정상화 후 진행 의미 있음
@@ -165,7 +165,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] **G 부분 — Server-Timing 헤더 + body `_timing` fallback** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. Vercel runtime이 헤더 strip하는 케이스 대비 응답 body에도 `_timing` 박음. DevTools Network → Preview/Response 탭에서 즉시 노출. e2e 회귀 가드 추가
 - [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
 - [x] **E 진단 완료** (2026-05-10, Stage 1) — `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade` **Seq Scan** 확정 (local Docker 5456 rows, 3ms). 기존 `(bjd_code, contract_date)` 복합 인덱스의 leading column이 `bjd_code`라 `MAX` 단독엔 활용 안 됨 (advisor 가설 정확). Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정 — (b)가 raw 인덱스 추가 없이 1행 SELECT라 더 깔끔
-- [ ] **D + C 적용 (Stage 2 PR)** — D는 모든 호출 ~50ms 응답(`'use cache'` directive + `cacheTag('mv_dong_stats')` + ETL workflow에서 Vercel deploy hook curl POST로 invalidate), C는 freshness 쿼리 우회 (위 E 결정 따라). Stage 1 prod 측정 후 진행
+- [x] **C 적용 (Stage 2a PR)** (2026-05-10) — freshness 쿼리 raw `MAX(contract_date)` Seq Scan → `etl_job_status` 1행 PK lookup. 옵션 (b) 채택. ETL이 03:00 갱신 후 max 박음, ALTER IF NOT EXISTS로 운영 DB 자동 마이그레이션. 로컬 검증: warm fresh **1572ms → 1.7ms (1000배 ↓)**. Production 측정은 deploy 후
+- [ ] **D 적용 (Stage 2b PR)** — affordable 응답 자체 edge cache. `'use cache'` directive + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats')` + ETL 갱신 후 Next.js `/api/revalidate?tag=mv_dong_stats&secret=...` POST. Stage 2a deploy 후 cold latency 측정 → D가 추가로 필요한지 판단
 
 ### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 
