@@ -24,3 +24,4 @@ Phase·마일스톤별로 UI가 어떻게 변해왔는지 시각 기록. 각 폴
 | 14 | [단일+collapsed 시도 revert 후 회귀 검증 (13과 동일)](14-recent-tx-revert-verify/) | 2026-05-09 | 36ca2c6 | 1 (UX 회귀 검증) |
 | 15 | [SidePanel 매매·전세 최근 거래 더보기 — 인라인 점진 로드 +20건](15-sidepanel-recent-load-more/) | 2026-05-10 | ec509fb | 1.5 (sidepanel 깊이 보기) |
 | 16 | [최근 거래 월별 sticky 그룹 + 자체 스크롤 박스 (max 320px)](16-recent-tx-grouping/) | 2026-05-10 | a1104bd | 1.5 (sidepanel 깊이 보기 라운드 2) |
+| 17 | [최초 방문 핵심 기능 힌트 + 버전 변경 안내](17-whats-new-first-visit-hint/) | 2026-05-11 | 7f1ec37 | 1.5 (최초 방문/버전 변경 안내) |

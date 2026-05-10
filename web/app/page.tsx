@@ -79,6 +79,8 @@ const CASH_MIN = 0;        // 0억
 const CASH_MAX = 500000;   // 50억 (강북 14구 매매 p99 26억, max 156억 outlier 1건은 cover하지 않음)
 const CASH_STEP = 5000;    // 5천만원 단위
 const URL_SYNC_DEBOUNCE_MS = 300;
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? 'dev';
+const LAST_SEEN_VERSION_KEY = 'eodigakka:last-seen-version';
 
 function hasAffordableQueryParams(params: URLSearchParams): boolean {
   return ['mode', 'cash_min', 'cash_max', 'size'].some((key) => params.has(key));
@@ -195,6 +197,7 @@ function MapPageContent() {
   const isNarrow = useIsNarrow();
   const [dongDetails, setDongDetails] = useState<DongDetailsResponse | null>(null);
   const [dongDetailsLoading, setDongDetailsLoading] = useState(false);
+  const [whatsNew, setWhatsNew] = useState<{ previous: string | null; current: string } | null>(null);
   // cash 슬라이더 변경에 의한 추가/제거 동 카운트 — 시각 피드백 칩
   // 다음 cash 변경 또는 mode/size 변경 시까지 유지(자동 fade-out 없음)
   const [cashDelta, setCashDelta] = useState<{ added: number; removed: number } | null>(null);
@@ -210,6 +213,26 @@ function MapPageContent() {
   affordableMapRef.current = new Map(
     (affordable?.dongs ?? []).map((d) => [d.bjd_code, d]),
   );
+
+  useEffect(() => {
+    try {
+      const previous = window.localStorage.getItem(LAST_SEEN_VERSION_KEY);
+      if (previous !== APP_VERSION) {
+        setWhatsNew({ previous, current: APP_VERSION });
+      }
+    } catch {
+      // localStorage를 사용할 수 없으면 안내를 생략한다.
+    }
+  }, []);
+
+  function dismissWhatsNew() {
+    try {
+      window.localStorage.setItem(LAST_SEEN_VERSION_KEY, APP_VERSION);
+    } catch {
+      // 저장 실패와 무관하게 현재 세션에서는 닫는다.
+    }
+    setWhatsNew(null);
+  }
 
   useEffect(() => {
     const nextQuery = parseAffordableQueryState(new URLSearchParams(searchParamsText));
@@ -413,6 +436,14 @@ function MapPageContent() {
           />
         )}
 
+        {whatsNew && (
+          <WhatsNewNotice
+            previousVersion={whatsNew.previous}
+            currentVersion={whatsNew.current}
+            onClose={dismissWhatsNew}
+          />
+        )}
+
         {error && (
         <div
           style={{
@@ -438,6 +469,100 @@ function MapPageContent() {
 
       <Footer dataFreshness={affordable?.data_freshness ?? null} />
     </div>
+  );
+}
+
+function WhatsNewNotice({
+  previousVersion,
+  currentVersion,
+  onClose,
+}: {
+  previousVersion: string | null;
+  currentVersion: string;
+  onClose: () => void;
+}) {
+  const isFirstVisit = previousVersion === null;
+  return (
+    <aside
+      aria-label={isFirstVisit ? '처음 방문 안내' : '새 버전 안내'}
+      style={{
+        position: 'absolute',
+        right: 12,
+        bottom: 14,
+        width: 'min(360px, calc(100vw - 24px))',
+        padding: '14px 14px 12px',
+        background: 'rgba(255,255,255,0.95)',
+        border: '1px solid rgba(45, 138, 79, 0.26)',
+        borderRadius: 8,
+        boxShadow: '0 8px 28px rgba(0,0,0,0.18)',
+        zIndex: 4,
+        fontSize: 13,
+        color: '#1f2933',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#2d8a4f', marginBottom: 4 }}>
+            {isFirstVisit ? 'FIRST VISIT' : 'WHAT\'S NEW'}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>
+            {isFirstVisit ? '어디가까 핵심 기능' : '새 버전이 배포됐습니다'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={isFirstVisit ? '처음 방문 안내 닫기' : '새 버전 안내 닫기'}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: '#667085',
+            cursor: 'pointer',
+            fontSize: 20,
+            lineHeight: 1,
+            padding: 0,
+          }}
+        >
+          ×
+        </button>
+      </div>
+      {isFirstVisit ? (
+        <ul
+          style={{
+            marginTop: 9,
+            paddingLeft: 18,
+            color: '#475467',
+            lineHeight: 1.55,
+          }}
+        >
+          <li>매매·전세와 평형을 바꾸면 지도 색이 즉시 바뀝니다.</li>
+          <li>자금 범위를 움직여 임장 후보 동만 좁혀볼 수 있습니다.</li>
+          <li>지도의 동을 누르면 단지 TOP5와 최근 거래가 열립니다.</li>
+        </ul>
+      ) : (
+        <div style={{ marginTop: 8, color: '#475467', lineHeight: 1.55 }}>
+          마지막 접속 버전 v{previousVersion}에서 현재 v{currentVersion}로 바뀌었습니다.
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        style={{
+          marginTop: 12,
+          width: '100%',
+          border: '1px solid #2d8a4f',
+          background: '#2d8a4f',
+          color: '#fff',
+          borderRadius: 4,
+          padding: '7px 10px',
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {isFirstVisit ? '시작하기' : '확인'}
+      </button>
+    </aside>
   );
 }
 
