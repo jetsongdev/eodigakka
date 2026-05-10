@@ -8,13 +8,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 자주 쓰는 명령어
 
-### DB (Docker)
+### DB
+
+**운영 SoT는 Neon** (`ap-southeast-1`). ETL(GHA cron)·Vercel API 양쪽 모두 Neon 직결. 아래 docker 명령어는 **로컬 web dev 옵션 + 신규 환경 부트스트랩용**으로만 유효. 일상 디버깅·데이터 검증은 `etl/.env`의 `DATABASE_URL`로 Neon에 직접 `psql` 권장.
+
 ```bash
+# 로컬 docker postgres (선택 — web dev 또는 신규 환경 부트스트랩)
 docker compose up -d                                        # postgres+postgis 기동
 docker exec -i eodigakka-postgres psql -U app -d eodigakka < db/schema.sql
 docker exec -i eodigakka-postgres psql -U app -d eodigakka < db/views.sql
 docker exec eodigakka-postgres psql -U app -d eodigakka -c "<쿼리>"
+
+# Neon 직결 (운영 환경 디버깅)
+docker run --rm -i postgres:16 psql "$(grep DATABASE_URL etl/.env | cut -d= -f2-)" -c "<쿼리>"
 ```
+
+신규 환경 부트스트랩·Neon 재마이그레이션은 `README.md` 「초기화 절차」 참조 (`db/migrate_to_neon.sh`).
 
 ### ETL (Python 3.12 venv 직접 실행)
 ```bash

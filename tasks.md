@@ -65,8 +65,8 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 
 ### 비-차단 정리 (편한 시점에)
 - [x] `etl/run_etl.sh` 폐기 (2026-05-05) — launchd 폐기 + GHA가 inline 명령으로 대체. live consumer 없음 확인 후 삭제. historical 언급(CHANGELOG·TIL·blog)은 의도적으로 유지.
-- [ ] `db/migrate_to_neon.sh` — 1회성 스크립트지만 Neon 재마이그레이션 시 재사용 가능. README에 "초기화 절차" 섹션으로 보존 명시
-- [ ] CLAUDE.md 표 갱신 — local docker postgres 명령어가 여전히 유효한지 (web dev에는 OK, ETL은 Neon 직결로 전환)
+- [x] `db/migrate_to_neon.sh` (2026-05-10) — README.md 「초기화 절차」 섹션 신설, 5단계 부트스트랩(docker schema 적재 → 폴리곤 → ETL 1회 → migrate → secrets) 명시. 스크립트 내부 동작(`pg_dump --exclude-schema=tiger,topology` + extension grep + 검증 카운트) 한 줄 요약.
+- [x] CLAUDE.md 표 갱신 (2026-05-10) — 「DB (Docker)」 → 「DB」로 헤더 변경. 운영 SoT는 Neon임을 명시하고 docker 명령어는 "로컬 web dev 또는 신규 환경 부트스트랩용"으로 한정. Neon 직결 디버깅 명령어(`docker run --rm postgres:16 psql "$NEON_URL"`) 추가.
 
 ### E. Vercel 배포 셋업 (2026-05-05 진행 중)
 
@@ -113,10 +113,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - **Mapbox eodigakka-prod**: 커스텀 도메인 연결 시 Mapbox 콘솔 URL restriction에 새 도메인 화이트리스트 추가 필수.
 - [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
 - [x] 면책 고지 + 데이터 출처가 SEO/소셜 카드에 노출 (2026-05-05) — `app/layout.tsx`에 `description` + `openGraph` + `twitter` metadata 추가 (PR #2)
-- [ ] **Preview deployment protection 끄기 또는 bypass token 발급** (2026-05-05 발견) — Vercel free plan은 Preview URL을 인증된 팀원만 접근 가능(`HTTP 401`). 외부 OG crawler(Telegram, Slack 등)가 익명 GET으로 미리보기 못 가져옴 → Preview에서 OG 카드 검증 불가. 옵션:
-  - (A) Vercel dashboard → Settings → Deployment Protection → "Vercel Authentication" 끄기 (가장 단순, 모든 Preview 익명 접근)
-  - (B) "Protection Bypass for Automation" 토큰 발급해 OG crawler용 헤더 첨부 (선택적)
-  - (C) 그대로 두고 Production에서만 OG 검증 (현재 패턴, 외부 공유 가치 적은 단계엔 충분)
+- [-] **Preview deployment protection** (2026-05-10 옵션 C 채택, 취소) — 분석 결과 옵션 A(Vercel Auth 끄기)는 Mapbox preview 토큰 abuse 위험. Preview 토큰은 unrestricted(default)인데 Mapbox URL restriction wildcard 미지원이라 `*.vercel.app` 화이트리스트 불가. Preview URL 공개 시 DevTools에서 토큰 수확 → 다른 도메인에서 quota 소진·청구 가능. 옵션 B는 OG crawler가 임의 header 첨부 불가라 사실상 GHA 자동화 외엔 의미 없음. 결론: 옵션 C(그대로 두고 Production에서만 OG 검증) — 외부 공유 가치 적은 현 단계에 충분. 외부 공유 시점 임박할 때 재평가.
 
 ### G. 사용자 피드백 채널 (2026-05-05 신규)
 

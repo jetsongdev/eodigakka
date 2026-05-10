@@ -29,6 +29,29 @@ RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
 cd web && npm install && npm run dev
 ```
 
+## 초기화 절차 (신규 환경 또는 Neon 재마이그레이션)
+
+운영 SoT는 Neon. 새 머신·새 Neon 프로젝트로 옮기는 경우만 사용.
+
+```bash
+# 1. 로컬 docker postgres에 schema·views 적재 + ETL 1회로 raw 채움
+docker compose up -d
+docker exec -i eodigakka-postgres psql -U app -d eodigakka < db/schema.sql
+docker exec -i eodigakka-postgres psql -U app -d eodigakka < db/views.sql
+.venv-etl/bin/python3 db/load_polygon.py "/path/to/LSMD_ADM_SECT_UMD_11_YYYYMM.shp" --sido 서울특별시 --truncate
+ETL_DISABLED=0 DATABASE_URL=postgresql://app:app@localhost:5432/eodigakka \
+  RTMS_KEY=$(grep RTMS_KEY etl/.env | cut -d= -f2-) \
+  .venv-etl/bin/python3 etl/fetch_rtms.py
+
+# 2. Neon SQL Editor에서 PostGIS 활성화: CREATE EXTENSION IF NOT EXISTS postgis;
+# 3. etl/.env에 NEON_URL='postgresql://...' 추가 후 마이그레이션
+bash db/migrate_to_neon.sh
+
+# 4. GitHub Secrets 등록 (DATABASE_URL=Neon, RTMS_KEY) + Vercel env (DATABASE_URL=Neon)
+```
+
+`db/migrate_to_neon.sh`는 `pg_dump --exclude-schema=tiger,topology` + extension 제거 grep + `psql` import + 검증 카운트(`bjd / trade / rent / mv_stats`)까지 자동. 시스템 `psql` 미설치라도 `docker run --rm postgres:16 psql`로 처리.
+
 ## 문서
 
 - [SPEC.md](SPEC.md) — 설계 SSOT, ADR-001~008
