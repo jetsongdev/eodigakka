@@ -10,6 +10,16 @@
 
 ---
 
+## [v0.8.1] - 2026-05-09 - /api/affordable 두 쿼리 Promise.all 병렬화 + Server-Timing 헤더
+
+### 변경
+- `web/app/api/affordable/route.ts` — `mv_dong_stats` JOIN 메인 쿼리와 `MAX(contract_date)` freshness 쿼리를 sequential `await` 두 번에서 `Promise.all` 병렬 실행으로 전환. 두 쿼리는 서로 독립이라 응답 시간이 max로 떨어지고 RTT 1번 절감. Neon 콜드 스타트 영향이 큰 첫 호출에서 가장 의미 있는 win 기대(tasks.md H 섹션 우선순위 1순위). 응답 형식·필드 동일
+
+### 추가
+- `Server-Timing` 응답 헤더 4개 metric 노출 — `stats;dur=<ms>` (메인 쿼리), `fresh;dur=<ms>` (freshness 쿼리), `db;dur=<ms>` (Promise.all wall-clock), `eval;dur=<ms>` (map/filter 처리). DevTools Network → Timing 탭에서 자동 시각화. 로컬 dev에서 `stats=65.7, fresh=49.2, db=65.8(=max), eval=0.1` 확인 — 병렬화 작동 입증(sequential이었으면 db≈115). 앞으로 latency 회귀 베이스라인 + Production 콜드 스타트 진단(가설 A) 도구로 영구 사용
+- 응답 body에 `_timing: { stats_ms, fresh_ms, db_ms, eval_ms }` 객체 추가 — Vercel runtime이 커스텀 응답 헤더를 strip하는 환경(Cache-Control도 자동 덮어쓰는 게 신호)에서 헤더가 클라까지 도달 안 됨. body fallback으로 측정 도구 가치 보장. DevTools Network → Preview/Response 탭에서 즉시 노출. Production 첫 호출 측정값(2026-05-09): `stats=1788.8, fresh=1572.4, db=1788.8(=max), eval=1.3` — Neon 콜드 dominant 확정
+- `tests/e2e/api.spec.ts` — `Server-Timing` 헤더 존재 회귀 가드 1줄 (`/stats;dur=\d.*db;dur=\d/`)
+
 ## [v0.8.0] - 2026-05-09 - SidePanel 최근 거래 — 탭 → 매·전 동시 섹션
 
 탭 토글로 한 번에 한 종류만 보던 "최근 거래" 영역을 매매·전세 두 섹션으로 분리해 동시 노출. 모드 전환 클릭 없이 두 흐름을 한 화면에서 비교 가능. 헤더 mode는 `/api/affordable`·TOP5·분포 차트 primary에서 계속 단일 source of truth.

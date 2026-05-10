@@ -33,31 +33,41 @@ export async function GET(request: NextRequest) {
     const query = parseAffordableQuery(request.nextUrl.searchParams);
     const statsMode = toStatsMode(query.mode);
 
-    const rows = await sql<AffordableRow>`
-      SELECT
-        s.bjd_code,
-        p.bjd_name,
-        s.size_bucket,
-        s.mode,
-        s.tx_count_3m,
-        s.unique_complex_3m,
-        CAST(s.median_man AS DOUBLE PRECISION) AS median_man,
-        CAST(s.p25_man AS DOUBLE PRECISION) AS p25_man,
-        CAST(s.p75_man AS DOUBLE PRECISION) AS p75_man,
-        s.last_contract_date::text AS last_contract_date,
-        s.confidence,
-        CAST(jr.ratio AS DOUBLE PRECISION) AS jeonse_ratio,
-        CAST(s.median_build_year AS DOUBLE PRECISION) AS median_build_year,
-        CAST(s.build_year_stddev AS DOUBLE PRECISION) AS build_year_stddev
-      FROM mv_dong_stats s
-      JOIN bjd_polygon p ON p.bjd_code = s.bjd_code
-      LEFT JOIN mv_jeonse_ratio jr
-        ON jr.bjd_code = s.bjd_code
-       AND jr.size_bucket = s.size_bucket
-      WHERE s.mode = ${statsMode}
-        ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
-      ORDER BY s.median_man ASC, s.tx_count_3m DESC
-    `.execute(db);
+    const t0 = performance.now();
+    let tStats = 0;
+    let tFresh = 0;
+    const [rows, freshness] = await Promise.all([
+      sql<AffordableRow>`
+        SELECT
+          s.bjd_code,
+          p.bjd_name,
+          s.size_bucket,
+          s.mode,
+          s.tx_count_3m,
+          s.unique_complex_3m,
+          CAST(s.median_man AS DOUBLE PRECISION) AS median_man,
+          CAST(s.p25_man AS DOUBLE PRECISION) AS p25_man,
+          CAST(s.p75_man AS DOUBLE PRECISION) AS p75_man,
+          s.last_contract_date::text AS last_contract_date,
+          s.confidence,
+          CAST(jr.ratio AS DOUBLE PRECISION) AS jeonse_ratio,
+          CAST(s.median_build_year AS DOUBLE PRECISION) AS median_build_year,
+          CAST(s.build_year_stddev AS DOUBLE PRECISION) AS build_year_stddev
+        FROM mv_dong_stats s
+        JOIN bjd_polygon p ON p.bjd_code = s.bjd_code
+        LEFT JOIN mv_jeonse_ratio jr
+          ON jr.bjd_code = s.bjd_code
+         AND jr.size_bucket = s.size_bucket
+        WHERE s.mode = ${statsMode}
+          ${query.size === 'all' ? sql`` : sql`AND s.size_bucket = ${query.size}`}
+        ORDER BY s.median_man ASC, s.tx_count_3m DESC
+      `.execute(db).then((r) => { tStats = performance.now() - t0; return r; }),
+      sql<{ max_contract_date: string | null }>`
+        SELECT MAX(contract_date)::text AS max_contract_date
+        FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
+      `.execute(db).then((r) => { tFresh = performance.now() - t0; return r; }),
+    ]);
+    const tDb = performance.now() - t0;
 
     const dongs = rows.rows
       .map((row) =>
@@ -98,21 +108,30 @@ export async function GET(request: NextRequest) {
         build_year_stddev: dong.buildYearStddev,
       }));
 
-    const freshness = await sql<{ max_contract_date: string | null }>`
-      SELECT MAX(contract_date)::text AS max_contract_date
-      FROM ${sql.raw(statsMode === 'TRADE' ? 'tx_apt_trade' : 'tx_apt_rent')}
-    `.execute(db);
-
     const maxContractDate = freshness.rows[0]?.max_contract_date ?? null;
+    const tEval = performance.now() - t0 - tDb;
 
-    return NextResponse.json({
-      dongs,
-      generated_at: new Date().toISOString(),
-      data_freshness: maxContractDate
-        ? `RTMS ${maxContractDate} 신고분까지`
-        : 'RTMS 신고분 없음',
-      evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
-    });
+    return NextResponse.json(
+      {
+        dongs,
+        generated_at: new Date().toISOString(),
+        data_freshness: maxContractDate
+          ? `RTMS ${maxContractDate} 신고분까지`
+          : 'RTMS 신고분 없음',
+        evidence: `조건 일치 ${dongs.length}개 동, 모드 ${statsMode}, 현금 ${query.cashMin}~${query.cashMax}만원`,
+        _timing: {
+          stats_ms: Number(tStats.toFixed(1)),
+          fresh_ms: Number(tFresh.toFixed(1)),
+          db_ms: Number(tDb.toFixed(1)),
+          eval_ms: Number(tEval.toFixed(1)),
+        },
+      },
+      {
+        headers: {
+          'Server-Timing': `stats;dur=${tStats.toFixed(1)}, fresh;dur=${tFresh.toFixed(1)}, db;dur=${tDb.toFixed(1)}, eval;dur=${tEval.toFixed(1)}`,
+        },
+      },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, evidence: '입력 검증 또는 조회 실패' }, { status: 400 });

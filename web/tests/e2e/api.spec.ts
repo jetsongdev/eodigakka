@@ -52,6 +52,7 @@ test('GET /api/affordable trade returns matching dongs', async ({ request }) => 
   expect(Array.isArray(body.dongs)).toBe(true);
   expect(body.dongs.length).toBeGreaterThanOrEqual(1);
   expect(body.evidence).toContain('조건 일치');
+  expect(response.headers()['server-timing']).toMatch(/stats;dur=\d.*db;dur=\d/);
 });
 
 test('GET /api/affordable jeonse returns dongs with color when present', async ({ request }) => {

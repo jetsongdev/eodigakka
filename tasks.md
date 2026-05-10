@@ -10,10 +10,20 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 
 **완료된 인프라**: Neon + GHA cron + Vercel 배포 + Telegram 알림 + 버전 bump 자동화 + CHANGELOG retrofit. 다음 라운드는 워크로드 특성에 따라 4갈래 중 골라잡는다.
 
-**현재 우선순위 추천 (cron stale alert 도입 직후)**:
-1. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — 매·전 분리는 v0.7.0에서 완료, 다음 칸은 10건 이후 페이지네이션 (`txCursor` 또는 `txOffset`)
-2. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
-3. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — 4개 draft 쌓여 있음, 외부 공유 의향 있으면 review pass
+**현재 우선순위 추천 (2026-05-09 갱신, Production latency 측정 직후)**:
+
+🚨 **최우선 — Production 로딩 latency 심각** (2026-05-09 두 차례 측정):
+
+| API | Cold | Warm | Note |
+|---|---|---|---|
+| `/api/affordable` | **3.46s** (stats=1788.8 fresh=1572.4) | ~900ms | Neon 콜드 + Vercel 함수 콜드 |
+| `/api/polygons` | **10.53s · 1142kB** | 170ms | first cold가 압도적, 이후 cache hit 동작 중 |
+| `/api/dong/[bjd]/complexes` | (미측정) | **2.13s · 1.2kB** | warm에서도 무거움 — 사이드패널 클릭 UX 직격. 응답 작은데 처리 큼 |
+
+1. 🔴 **H + I + J 묶음 별도 PR** (PR #16 merge 직후 진행) — H의 D(affordable edge cache) + E(인덱스) + I 전체(polygons CDN cache + precision 축소) + J 신규(complexes 진단·인덱스·cache). 임장 검증·외부 공유 전 필수 통과
+2. 🔵 **사이드패널 최근 거래 더보기** (Phase 1 잔여) — H+I+J 처리 후 재진입
+3. ⚪ **모바일 범례 floating chip** (A 섹션) — 컨트롤 패널 collapsible은 끝, 범례만 별도 시트로 분리
+4. 🔵 **블로그 단편 review** (C 섹션, 외부 공유) — H+I+J로 latency 정상화 후 진행 의미 있음
 
 ### A. UX 마무리 (Phase 1 잔여 — 빠른 wins)
 - [x] 슬라이더 드래그 중 비동기 색칠 — onValueChange debounce 150ms + AbortController in-flight cancel (2026-05-05)
@@ -151,6 +161,60 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 4. C, E, F, G — D로 해결되면 후순위
 
 **트리거**: 사용자가 "첫 로딩 느리다" 1회 인지(2026-05-07). 임장 1회 검증 직후 또는 외부 공유 직전에 D까지 처리.
+
+**진척**:
+- [x] **B. Promise.all 병렬화** (PR #16, 2026-05-09) — 두 쿼리(`mv_dong_stats` JOIN + `MAX(contract_date)`)를 `Promise.all`로 묶음. Production 첫 호출 측정 `stats=1788.8 fresh=1572.4 db=1788.8(=max) eval=1.3` — 병렬 작동 입증, sequential이었으면 db≈3361. **fresh 흡수로 ~1.57s 절감**
+- [x] **G 부분 — Server-Timing 헤더 + body `_timing` fallback** (PR #16, 2026-05-09) — `/api/affordable` 응답에 `stats / fresh / db / eval` 4개 metric 노출. Vercel runtime이 헤더 strip하는 케이스 대비 응답 body에도 `_timing` 박음. DevTools Network → Preview/Response 탭에서 즉시 노출. e2e 회귀 가드 추가
+- [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
+- [ ] **D + E 적용** (별도 PR 예정) — D는 모든 호출 ~50ms 응답, E는 warm 700ms 베이스라인 단축. I 섹션 polygons와 묶음 PR로 진행
+
+### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
+
+**현상**: Production 첫 호출 측정 **10.53s · 1142kB** (2026-05-09). 단일 응답이 affordable(3.46s)보다 3배 더 느려 첫 로딩 dominant cost. 467개 법정동 폴리곤은 V-World LSMD 적재 후 거의 변경 없는 정적 데이터인데 매 요청마다 DB 풀스캔 + `ST_AsGeoJSON` 직렬화 + Node `JSON.parse` 467회 왕복 발생. 응답 헤더에 `Cache-Control: public, max-age=86400` 박혀있으나 `dynamic = 'force-dynamic'`이라 Vercel CDN edge cache 무력화. Mr. Song "성능 심각한데?" 1차 인지.
+
+**가설별 진단·개선 후보**:
+
+- [ ] **A. Vercel CDN edge cache 적용** — `dynamic = 'force-dynamic'` 제거 + `dynamic = 'force-static'` 또는 `revalidate = 86400`로 전환. ETL이 폴리곤 안 건드리니 사실상 정적. 첫 호출만 DB, 이후 모두 CDN edge. 가장 큰 win.
+  - 검증: 응답 헤더의 `cf-cache-status` / `x-vercel-cache` 확인 — 현재 `MISS` 박혀있으면 force-dynamic이 캐시 무력화 중
+- [ ] **B. `ST_AsGeoJSON` precision 축소** — default 6 decimal places (≈11cm). zoom 11 시각화엔 precision 5(≈1.1m) 또는 4(≈11m)로 충분. `ST_AsGeoJSON(geom, 5)`로 응답 크기 ~30~40% 감소 기대.
+- [ ] **C. `ST_SimplifyPreserveTopology` 적용** — Douglas-Peucker로 좌표 점 수 자체 축소. tolerance 5m(≈0.00005°)면 zoom 11 시각엔 차이 안 보이고 페이로드 추가 축소.
+- [ ] **D. `JSON.parse` 왕복 제거** — `ST_AsGeoJSON(geom)::jsonb` 또는 pg `to_json`/`json_build_object` row aggregation으로 직접 JSON 객체 받기. Node.js `JSON.parse(467회)` CPU 비용 절감. dominant 아닐 수 있어 측정 후 결정.
+- [ ] **E. Server-Timing 헤더** — affordable처럼 `db / serialize / parse` 시간 분리해 정량 진단. 어디가 dominant인지 측정 후 A·B·C·D 우선순위 결정.
+- [ ] **F. Build-time 정적 파일 프리렌더** — V-World 갱신(분기 단위)에만 변경. `public/polygons.json` 빌드 시 생성 → 클라가 정적 파일 직접 fetch. DB 의존 제거 + CDN 자동 캐시. 단점: 폴리곤 갱신 시 재빌드 필요. A로 안 풀리면 비상 카드.
+- [ ] **G. Brotli precompress + Content-Encoding 검증** — Vercel은 자동 brotli 압축. 1342kB 응답이 wire에서 어느 정도까지 압축되는지 `content-length` 확인. 압축 잘 되면 wire 비용은 작고 dominant은 서버 처리 → A·E 우선.
+
+**우선순위 추천**:
+1. E (Server-Timing) — 5분 작업, 측정 후 dominant 판정
+2. A (CDN cache) — `force-static` 한 줄 변경, 가장 큰 win
+3. B + C (precision/simplify) — 페이로드 축소, 모바일 첫 로딩 체감
+4. D — A로 해결되면 후순위
+5. F — 비상 카드
+
+**트리거**: Mr. Song이 Production Network 탭에서 polygons **10.53s · 1142kB** 측정 후 "성능 심각한데?" 1차 인지(2026-05-09). 임장 검증·외부 공유 진입 전 통과 필수. affordable PR #16 merge 후 H 섹션 D+E와 묶음 PR로 진행.
+
+**진척**:
+- [~] **추가 측정** (2026-05-09 2차 캡처) — Production warm 상태 polygons **170ms** 확인. 즉 `force-dynamic`이어도 Vercel CDN/브라우저 캐시가 일부 동작 중(응답 헤더 `Cache-Control: public, max-age=86400`이 클라 캐시 트리거). 다만 first cold 10.53s는 그대로 부담 — A(force-static) 적용 시 cold도 build artifact로 박혀 0번째 사용자도 즉시. F(빌드 시점 정적 파일)는 backup으로.
+
+### J. `/api/dong/[bjd]/complexes` 사이드패널 latency 개선 (2026-05-09 신규)
+
+**현상**: 폴리곤 클릭 → 사이드패널 트리거 직후 `/api/dong/[bjd]/complexes` 호출이 Production warm 상태에서도 **2.13s · 1.2kB** 소요(2026-05-09 2차 캡처). 응답 페이로드는 작은데 처리 시간이 큼 → DB 측 처리 또는 다중 쿼리 직렬화·인덱스 누락 의심. 사이드패널 UX(클릭 → 시트 슬라이드 → 데이터 도착) 직격. v0.7.0에서 `recent_trades` + `recent_jeonse` 두 쿼리는 이미 `Promise.all`로 묶음, distributions·TOP5는 추가 쿼리.
+
+**가설별 진단·개선 후보**:
+
+- [ ] **A. Server-Timing 적용** — affordable과 동일 패턴. sub-쿼리(distributions / top5 / recent_trades / recent_jeonse) 각각 시간 측정해 dominant 판정. 5분 작업
+- [ ] **B. raw 테이블 인덱스 점검** — `tx_apt_trade(bjd_code, contract_date DESC)` / `tx_apt_rent(bjd_code, contract_date DESC)` 복합 인덱스 여부. recent_*는 `WHERE bjd_code = ? ORDER BY contract_date DESC LIMIT 10`이라 복합 인덱스가 가장 큰 win. H 섹션 E와 묶어 `EXPLAIN ANALYZE` 한 번에 진단
+- [ ] **C. TOP5 단지 쿼리 비용** — `complex_name` GROUP BY + 거래 수·중위가격 정렬 쿼리. raw 풀스캔이면 비용 큼. EXPLAIN으로 확인
+- [ ] **D. distributions 쿼리** — `mv_dong_stats`는 이미 인덱스(`bjd_code, size_bucket, mode`)로 빠를 것. 측정으로 제외 가능성 큼
+- [ ] **E. Vercel Runtime Cache** — `(bjd_code, mode)` 조합별 1h TTL. ETL이 03:00 갱신이라 신선도 충분. 같은 동을 여러 번 보는 케이스에 효과
+- [ ] **F. 필요 시 `mv_complex_top5` MV 신설** — TOP5 단지 정보를 (bjd_code) 기준 사전 집계. ETL 끝나고 MV refresh. C 진단 결과 무거우면 적용
+
+**우선순위**:
+1. A (Server-Timing) — 측정 먼저, 어디가 dominant인지 정량 진단
+2. B (인덱스) — H 섹션 E와 묶어 처리. 가장 확실한 win
+3. E (cache) — H 섹션 D와 같은 패턴, 묶어서 같이
+4. C·F — A 결과 보고 결정
+
+**트리거**: Mr. Song이 Production Network 탭에서 complexes **2.13s · 1.2kB** 측정(2026-05-09 2차 캡처). 사이드패널 UX 직격. H+I 묶음 PR에 J 섹션도 같이 포함.
 
 ---
 
