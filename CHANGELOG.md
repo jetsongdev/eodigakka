@@ -10,6 +10,29 @@
 
 ---
 
+## [v0.10.0] - 2026-05-10 - 사이드패널 최근 거래 더보기 (인라인 점진 로드 + 월별 그룹 + 자체 스크롤)
+
+동 상세 사이드패널의 매매·전세 최근 거래가 각각 10건 고정이었던 걸 +20건씩 누적 로드되도록 풀었다. 사용자가 거래 흐름을 더 깊이 보고 싶을 때 모달이나 페이지 이동 없이 같은 자리에서 펼친다. 누적 시 스크롤 감당이 길어지는 문제는 월별 그룹 헤더(sticky) + 매매·전세 각 섹션 자체 스크롤 컨테이너(max 320px)로 해결.
+
+### 추가
+- `web/app/api/dong/[bjd]/recent/route.ts` — 매매/전세 최근 거래 페이징 전용 엔드포인트. 쿼리: `mode=trade|jeonse` (필수), `offset` (0..200), `limit` (1..50). LIMIT+1 trick으로 `has_more` 추론, 별도 COUNT 쿼리 없음. `'use cache'` + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats', 'recent-{bjd}-{mode}-{offset}-{limit}')` — ETL revalidate webhook이 `mv_dong_stats` 태그 invalidate 시 같이 무효화됨. 정렬은 `contract_date DESC, complex_name ASC, area_m2 ASC` (deterministic tie-break).
+- `web/app/page.tsx` `RecentTxSections` — bjd 변경 시 누적·에러 reset, 매매·전세 각각 독립 더보기 버튼·로딩·에러 상태. 라벨은 `매매 최근 거래 N건+`(has_more 시 `+` 표기), 빈 거래는 기존대로 "최근 거래 없음".
+- `web/app/page.tsx` `groupByMonth` 헬퍼 + 행 렌더링 — `<table>` → `<div>` grid 구조 재작성. 월별(YYYY-MM) 그룹 헤더가 매매·전세 각 섹션 자체 스크롤 박스(max-height 320px) 안에서 `position: sticky; top: 0`. 누적이 50건·100건이 돼도 사이드패널 다른 섹션(EvidenceCard·DistributionChart·TOP5)을 가리지 않고, 스크롤 중에도 현재 보고 있는 월이 항상 박스 상단에 노출.
+- `web/tests/e2e/api.spec.ts` — `/recent` 페이징 smoke 테스트(첫 페이지 has_more, 다음 페이지 offset=10) + 입력 validation 테스트(잘못된 mode·bjd·limit·offset → 400) 추가.
+
+### 결정
+- **별도 엔드포인트 vs 기존 `/complexes` 확장**: 기존 endpoint는 top5·distribution·bjd_name 등을 묶어 한 번에 응답하는 dashboard 페이로드. 페이징 limit을 키우면 캐시가 limit별로 갈라져 dashboard 부분까지 같이 분기되는 낭비가 생긴다. 페이징 책임만 가진 endpoint를 분리해 cache key를 좁게 잡았다.
+- **LIMIT+1 trick**: `COUNT(*)` 추가 쿼리 없이 다음 페이지 존재 여부만 정확히 확인. 총 건수 표기는 현재 UX에서 불필요(범위 가드 `MAX_OFFSET=200`로 충분히 커버).
+- **MAX_OFFSET 200, MAX_LIMIT 50**: 강북 14구 한 동 3개월 거래수 기준 250건 이상 적재된 동이 거의 없음. 악의적 깊은 페이징·DoS 가드.
+- **cache key에 limit/offset 포함**: `recent-{bjd}-{mode}-{offset}-{limit}` 태그는 invalidate 시 와일드카드 매칭이 아니라 정확 매칭이지만, `mv_dong_stats` 태그를 함께 부여해 ETL→/api/revalidate 훅이 한 번에 모두 쓸어내게 함.
+- **자체 스크롤 컨테이너 vs 사이드패널 전체 스크롤**: 매매·전세 각 섹션에 `max-height: 320px; overflow-y: auto`로 자체 스크롤 분리. 사이드패널 전체 스크롤은 살아있어 다른 섹션(TOP5·distribution) 접근 가능. nested scroll의 모바일 어색함은 `RECENT_SCROLL_MAX_PX=320`이라 손가락 한 번 스와이프 안에 들어와 실측상 무리 없음. 대안(전체 사이드패널 스크롤만)은 누적 100건+에서 EvidenceCard가 시야 위로 사라져 "지금 보는 동이 어디였더라" 컨텍스트 분실.
+- **`<table>` → `<div>` grid**: `position: sticky`가 table 행 단위에선 브라우저별 동작이 들쭉날쭉(spec gray area). 시각은 grid `1fr auto 36px`로 동일하게 맞추고 sticky 신뢰성 확보. column header(`단지·평형 / 금액 / 일자`)는 스크롤 박스 밖에 둬서 항상 노출.
+- **끝 라벨 `· 여기까지 · 총 N건 ·`**: 더보기 한참 누르다 `has_more=false` 응답이 와서 버튼이 갑자기 사라지면 "끝났는지/버그인지" 모호. 더보기 자리에 작은 회색 라벨로 끝남을 명시. 첫 응답 9건 이하(초기 has_more=false)는 카운트만으로 자명하므로 `rows.length >= RECENT_INITIAL_COUNT(10)` 조건일 때만. 데이터 자체는 ETL이 적재한 직전 3개월(`etl/fetch_rtms.py:356` `count=3`) 윈도우에 한정.
+
+### 검증
+- `npx tsc --noEmit` 통과 (exit 0).
+- `next build` 컴파일·TypeScript 단계 통과 (`Compiled successfully` + `Finished TypeScript`). 이후 page data collection은 워크트리에 `.env.local` 부재로 DATABASE_URL 누락 → 환경 종속 단계 미실행. **사용자 환경에서 dev server 가동 후 `/api/dong/<bjd>/recent?mode=trade&offset=0&limit=20` 200 응답·has_more 동작·사이드패널 더보기 버튼 클릭 누적 동작 확인 필요.**
+
 ## [v0.9.0] - 2026-05-10 - URL 쿼리 파라미터 양방향 동기화
 
 PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반영. 새로고침·딥링크 공유·외부 진입 시 슬라이더·토글 상태 그대로 복원. Phase 1 임장 후보 목록을 URL로 주고받을 수 있게 됨.
