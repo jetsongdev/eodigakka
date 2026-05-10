@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import math
 import os
 import sys
@@ -347,13 +348,39 @@ def refresh_materialized_views(dsn: str) -> None:
             cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_jeonse_ratio")
 
 
+DEFAULT_MONTHS = 3
+MAX_MONTHS = 36
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="RTMS 매매·전월세 fetch + raw 적재 (강북 14구).",
+    )
+    parser.add_argument(
+        "--months",
+        type=int,
+        default=DEFAULT_MONTHS,
+        help=(
+            f"fetch할 직전 N개월 (default {DEFAULT_MONTHS}, max {MAX_MONTHS}). "
+            f"정기 cron은 default 3 유지(신고지연 보정), 풀 재적재 1회용은 24."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.months < 1 or args.months > MAX_MONTHS:
+        parser.error(f"--months must be 1..{MAX_MONTHS}, got {args.months}")
+    return args
+
+
 def main() -> int:
     if os.getenv("ETL_DISABLED") == "1":
         return 0
 
+    args = parse_args()
+
     db_config = DbConfig(dsn=require_env("DATABASE_URL"))
     api = TransactionPrice(require_env("RTMS_KEY"))
-    months = month_tokens(date.today(), count=3)
+    months = month_tokens(date.today(), count=args.months)
+    print(f"ETL started: months={args.months} (window {months[-1]}~{months[0]})")
 
     with psycopg2.connect(db_config.dsn) as conn:
         ensure_etl_status_table(conn)

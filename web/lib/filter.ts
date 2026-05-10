@@ -18,6 +18,13 @@ export interface AffordableQuery {
   loanFilter: string | null;
 }
 
+interface AffordableQueryDefaults {
+  mode: QueryMode;
+  cashMin: number;
+  cashMax: number;
+  size: SizeBucket | 'all';
+}
+
 export interface DongStatInput {
   bjdCode: string;
   bjdName: string;
@@ -55,19 +62,27 @@ function parseIntegerParam(
   return parsed;
 }
 
-export function parseAffordableQuery(params: URLSearchParams): AffordableQuery {
-  const modeParam = (params.get('mode') ?? 'trade').toLowerCase();
+export function parseAffordableQuery(
+  params: URLSearchParams,
+  defaults: AffordableQueryDefaults = {
+    mode: 'trade',
+    cashMin: 40000,
+    cashMax: 80000,
+    size: 'all',
+  },
+): AffordableQuery {
+  const modeParam = (params.get('mode') ?? defaults.mode).toLowerCase();
   if (modeParam !== 'trade' && modeParam !== 'jeonse') {
     throw new Error('mode must be trade or jeonse');
   }
 
-  const sizeParam = (params.get('size') ?? 'all').toUpperCase();
+  const sizeParam = (params.get('size') ?? defaults.size).toUpperCase();
   if (sizeParam !== 'ALL' && sizeParam !== 'S' && sizeParam !== 'M' && sizeParam !== 'L') {
     throw new Error('size must be S, M, L, or all');
   }
 
-  const cashMin = parseIntegerParam(params.get('cash_min'), 40000, 'cash_min');
-  const cashMax = parseIntegerParam(params.get('cash_max'), 80000, 'cash_max');
+  const cashMin = parseIntegerParam(params.get('cash_min'), defaults.cashMin, 'cash_min');
+  const cashMax = parseIntegerParam(params.get('cash_max'), defaults.cashMax, 'cash_max');
   if (cashMin > cashMax) {
     throw new Error('cash_min must be less than or equal to cash_max');
   }

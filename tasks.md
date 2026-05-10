@@ -32,6 +32,7 @@ SPEC.md가 single source of truth. 여기선 실행 단위만 관리.
 - [x] 모바일 컨트롤 collapsible — `(max-width: 640px)` 기본 접힘 + 1줄 요약 + 토글 (2026-05-05)
 - [x] **모바일 hover tooltip 영구 잔류 회귀 fix** (2026-05-05) — A+B 조합 적용: `useIsHoverCapable` 훅(`matchMedia('(hover: hover) and (pointer: fine)')`)으로 터치 환경 감지 + `!selectedBjd` 가드로 sidepanel 열린 동안 tooltip 숨김
 - [x] **SidePanel 모바일 bottom sheet** (2026-05-05) — `useIsNarrow` 훅 + isNarrow 분기로 `position: fixed; bottom: 0; max-height: 80vh`, 백드롭 탭으로 닫기, 드래그 핸들 시각 affordance 추가. 스와이프 제스처는 의존성 회피로 제외
+- [x] **URL 쿼리 파라미터 양방향 동기화** (2026-05-07) — `mode`/`cash_min`/`cash_max`/`size`를 URL search params에 반영. mode/size 즉시 `router.replace`, cash 300ms debounce. `parseAffordableQuery` defaults 인자 확장으로 재사용. `<Suspense>` 래퍼 추가로 Next.js 16 빌드 경고 해소. 새로고침·딥링크 공유 시 상태 복원, history 폭주 없음.
 - [ ] 잔여: 모바일 범례 floating chip, 슬라이더 햅틱 피드백
 - [x] **확대/축소 버튼 크기 키우기** (2026-05-08) — Mapbox `NavigationControl`의 기본 30×30 → 44×44(권장 터치 타겟)로 키움. `web/app/globals.css`에 `.mapboxgl-ctrl button.mapboxgl-ctrl-zoom-in/out` width/height + 아이콘 background-size 26×26 override. 모든 viewport 공통 — 데스크톱도 hit area 확대로 사용성 ↑.
 

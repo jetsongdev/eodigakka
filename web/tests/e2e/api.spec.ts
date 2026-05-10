@@ -137,3 +137,59 @@ test('GET /api/dong/:bjd/complexes returns separate trade and jeonse arrays', as
     expect(body.recent_trades[0]).toHaveProperty('amount_man');
   }
 });
+
+test('GET /api/dong/:bjd/recent paginates trades with has_more flag', async ({ request }) => {
+  const probe = await request.get(
+    '/api/affordable?mode=trade&cash_min=0&cash_max=500000&size=all',
+  );
+  if (probe.status() !== 200) test.skip(true, 'affordable probe 실패');
+  const probeBody = await probe.json();
+  // 매매 표본 11건 이상이어야 has_more 검증 가능 (offset=10 시 추가 row 존재)
+  const candidate = probeBody.dongs?.find((d: { tx_count_3m: number }) => d.tx_count_3m >= 11);
+  test.skip(!candidate, '거래 11건 이상 동 없음');
+
+  const first = await request.get(
+    `/api/dong/${candidate.bjd_code}/recent?mode=trade&offset=0&limit=10`,
+  );
+  expect(first.status()).toBe(200);
+  const firstBody = await first.json();
+  expect(firstBody.mode).toBe('trade');
+  expect(firstBody.offset).toBe(0);
+  expect(firstBody.limit).toBe(10);
+  expect(Array.isArray(firstBody.rows)).toBe(true);
+  expect(firstBody.rows.length).toBeLessThanOrEqual(10);
+  expect(firstBody).toHaveProperty('has_more');
+  if (firstBody.rows.length > 0) {
+    expect(firstBody.rows[0]).toHaveProperty('amount_man');
+    expect(firstBody.rows[0]).toHaveProperty('contract_date');
+    expect(firstBody.rows[0]).toHaveProperty('evidence');
+  }
+
+  // 11건 이상 거래 동이므로 첫 페이지 has_more=true
+  expect(firstBody.has_more).toBe(true);
+
+  // 다음 페이지 fetch — offset=10에 최소 1행 더 있어야 함
+  const next = await request.get(
+    `/api/dong/${candidate.bjd_code}/recent?mode=trade&offset=10&limit=20`,
+  );
+  expect(next.status()).toBe(200);
+  const nextBody = await next.json();
+  expect(nextBody.offset).toBe(10);
+  expect(nextBody.rows.length).toBeGreaterThanOrEqual(1);
+});
+
+test('GET /api/dong/:bjd/recent rejects invalid mode and bjd', async ({ request }) => {
+  const badMode = await request.get('/api/dong/1138010300/recent?mode=invalid&offset=0&limit=10');
+  expect(badMode.status()).toBe(400);
+
+  const badBjd = await request.get('/api/dong/abc/recent?mode=trade&offset=0&limit=10');
+  expect(badBjd.status()).toBe(400);
+
+  const badLimit = await request.get('/api/dong/1138010300/recent?mode=trade&offset=0&limit=0');
+  expect(badLimit.status()).toBe(400);
+
+  const badOffset = await request.get(
+    '/api/dong/1138010300/recent?mode=trade&offset=-1&limit=10',
+  );
+  expect(badOffset.status()).toBe(400);
+});
