@@ -43,7 +43,7 @@ function formatA11yDate(date: string): string {
 }
 
 function formatLocation(sigungu: string, dong: string): string {
-  return `${sigungu.replace(/구$/, '')}·${dong}`;
+  return `${sigungu}·${dong}`;
 }
 
 function formatArea(area: number): string {
