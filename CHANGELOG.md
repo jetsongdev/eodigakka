@@ -10,6 +10,27 @@
 
 ---
 
+## [v0.13.1] - 2026-05-11 - 지도 페이지 구조 리팩터링
+
+### 추가
+- `docs/refactors/2026-05-11-map-page-structure.md` — route/client 분리, query state helper 분리, Playwright 안정화 내용을 정리한 리팩터링 리포트.
+- `docs/snapshots/22-map-page-structure-refactor/` — 구조 리팩터링 후 데스크톱/모바일 UI 회귀 확인 snapshot.
+
+### 변경
+- `web/app/page.tsx` — route entry를 얇은 wrapper로 축소하고 실제 client 지도 화면은 `web/components/MapPageClient.tsx`로 이동.
+- `web/lib/affordable-query-state.ts` — affordable URL query state 파싱/직렬화 helper 분리.
+- `web/components/map-page-hooks.ts` — hover/narrow media query hook 분리.
+- `web/tests/e2e/map.spec.ts` — marquee ticker, 첫 방문 안내, mode selector, SidePanel 열기 경로에 의존하던 flaky 지점을 현재 UI 계약에 맞게 안정화.
+
+### 검증
+- `cd web && ./node_modules/.bin/tsc --noEmit`
+- `git diff --check`
+- `cd web && npx playwright test tests/e2e/map.spec.ts`
+- `cd web && npx playwright test`
+- `cd web && npm run build`
+
+---
+
 ## [v0.13.0] - 2026-05-11 - 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
 
 ### 추가

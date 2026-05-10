@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import pkg from '../../package.json';
 
 let hasMapboxToken = true;
 
@@ -13,8 +14,19 @@ async function skipIfDbUnavailable(page: Page) {
 
 async function openMap(page: Page) {
   await skipIfDbUnavailable(page);
-  await page.goto('/');
+  await page.addInitScript((version) => {
+    window.localStorage.setItem('eodigakka:last-seen-version', version);
+  }, pkg.version);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.addStyleTag({
+    content: '.recent-ticker-track { animation: none !important; transform: none !important; }',
+  });
   await expect(page.getByText('eodigakka', { exact: false })).toBeVisible();
+  const notice = page.locator('aside[aria-label="처음 방문 안내"], aside[aria-label="새 버전 안내"]');
+  if (await notice.isVisible().catch(() => false)) {
+    await notice.getByRole('button', { name: /^(시작하기|확인)$/ }).click();
+    await expect(notice).toBeHidden();
+  }
 }
 
 test.beforeAll(async () => {
@@ -46,7 +58,7 @@ test('최근 거래 티커가 footer 바로 위에 보이고 항목 클릭으로
   await expect(ticker).toBeVisible();
   await expect(ticker.locator('.recent-ticker-track')).toHaveCount(1);
 
-  await ticker.getByRole('button').first().click();
+  await ticker.getByRole('button').first().click({ force: true });
 
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 });
@@ -58,7 +70,7 @@ test('매매 전세 토글 시 evidence 텍스트가 바뀐다', async ({ page }
   await expect(evidence).toBeVisible();
   const before = (await evidence.textContent()) ?? '';
 
-  await page.getByRole('button', { name: '전세' }).click();
+  await page.getByRole('button', { name: '전세', exact: true }).click();
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
@@ -146,47 +158,33 @@ test('모바일 — 접힌 컨트롤 밖에서 범례 chip을 열 수 있다', a
   await expect(legendDialog.getByText('미통과/표본 부족')).toBeVisible();
 });
 
-// SidePanel은 폴리곤 클릭으로만 열린다. Playwright native mouse는 synthetic
-// MouseEvent보다 안정적으로 mapbox 이벤트 시스템에 도달한다. 좌표는 폴리곤이
-// 등록된 캔버스 내부 비율(강북구 영역 우상단 짙은 녹색 클러스터).
-async function clickPolygon(page: Page) {
-  // 폴리곤 source/layer가 등록돼 hit-test가 성공하도록 보증
-  await expect(page.getByText(/폴리곤\s+\d+개/)).toBeVisible();
-  const canvas = page.locator('canvas.mapboxgl-canvas');
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error('canvas boundingBox 없음');
-  // 강북구 미아동 ~ (66%, 24%) — viewport 1280×720 기준 폴리곤 클러스터
-  await page.mouse.click(
-    box.x + box.width * 0.66,
-    box.y + box.height * 0.24,
-  );
-}
-
-async function openSidePanelByMapClick(page: Page) {
+async function openSidePanel(page: Page) {
   await openMap(page);
-  await clickPolygon(page);
+  const ticker = page.getByRole('region', { name: '강북 14구 최근 거래 50건' });
+  await expect(ticker).toBeVisible();
+  await ticker.getByRole('button').first().click({ force: true });
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 }
 
 test('SidePanel — 최근 거래 섹션은 매매와 전세를 동시에 표시한다', async ({ page }) => {
-  await openSidePanelByMapClick(page);
+  await openSidePanel(page);
 
-  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
-  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
+  const tradeSection = page.getByRole('heading', { name: /매매 최근 거래/ });
+  const jeonseSection = page.getByRole('heading', { name: /전세 최근 거래/ });
 
   await expect(tradeSection).toBeVisible();
   await expect(jeonseSection).toBeVisible();
 });
 
 test('SidePanel — 헤더 mode 토글 후에도 최근 거래 섹션이 유지된다', async ({ page }) => {
-  await openSidePanelByMapClick(page);
+  await openSidePanel(page);
 
-  const tradeSection = page.getByRole('heading', { name: /매매 최근 10건/ });
-  const jeonseSection = page.getByRole('heading', { name: /전세 최근 10건/ });
+  const tradeSection = page.getByRole('heading', { name: /매매 최근 거래/ });
+  const jeonseSection = page.getByRole('heading', { name: /전세 최근 거래/ });
   const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
   const aside = page.locator('aside[role="complementary"]');
 
-  await page.getByRole('button', { name: '전세' }).click();
+  await page.getByRole('button', { name: '전세', exact: true }).click();
 
   await expect
     .poll(async () => (await evidence.textContent()) ?? '')
@@ -200,18 +198,21 @@ test('SidePanel — 헤더 mode 토글 후에도 최근 거래 섹션이 유지�
 
 test('SidePanel — 헤더 mode 토글 후 열어도 최근 거래 섹션은 양쪽 모두 보인다', async ({ page }) => {
   await openMap(page);
+  const evidence = page.getByText(/(매매|전세) · .+~.+ · /);
+  await expect(evidence).toBeVisible();
 
   // 1. 헤더 mode를 전세로 변경
-  await page.getByRole('button', { name: '전세' }).click();
+  await page.getByRole('button', { name: '전세', exact: true }).click();
   await expect
-    .poll(async () => (await page.getByText(/(매매|전세) · .+~.+ · /).textContent()) ?? '')
+    .poll(async () => (await evidence.textContent()) ?? '')
     .toContain('전세 ·');
 
-  // 2. 폴리곤 클릭으로 SidePanel 열기
-  await clickPolygon(page);
+  // 2. 최근 거래 티커 클릭으로 SidePanel 열기
+  const ticker = page.getByRole('region', { name: '강북 14구 최근 거래 50건' });
+  await ticker.getByRole('button').first().click({ force: true });
   await expect(page.locator('aside[role="complementary"]')).toBeVisible({ timeout: 10000 });
 
   // 3. 두 거래 섹션이 함께 보인다
-  await expect(page.getByRole('heading', { name: /매매 최근 10건/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: /전세 최근 10건/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /매매 최근 거래/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /전세 최근 거래/ })).toBeVisible();
 });
