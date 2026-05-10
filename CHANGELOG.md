@@ -10,7 +10,7 @@
 
 ---
 
-## [Unreleased] - 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
+## [v0.13.0] - 2026-05-11 - 접근성 퀵윈 + 모바일 SidePanel swipe-down 닫기
 
 ### 추가
 - `.claude/settings.json` + `.claude/hooks/ensure-worktree-env-local.sh` — Claude `SessionStart` 시 cwd가 `.claude/worktrees/*`이면 root checkout의 `web/.env.local`을 worktree `web/.env.local`로 symlink. 기존 파일이나 다른 symlink는 덮어쓰지 않고 skip.
