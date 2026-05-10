@@ -4,7 +4,14 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
-from fetch_rtms import filter_cancelled, update_etl_status
+from fetch_rtms import (
+    DEFAULT_MONTHS,
+    MAX_MONTHS,
+    filter_cancelled,
+    month_tokens,
+    parse_args,
+    update_etl_status,
+)
 
 
 class FilterCancelledTest(unittest.TestCase):
@@ -57,6 +64,45 @@ class UpdateEtlStatusTest(unittest.TestCase):
         update_sql, _ = cursor.execute.call_args_list[1].args
         self.assertNotIn("last_contract_date_trade", update_sql)
         self.assertNotIn("last_contract_date_rent", update_sql)
+
+
+class MonthTokensTest(unittest.TestCase):
+    def test_default_returns_three_descending_months(self) -> None:
+        tokens = month_tokens(date(2026, 5, 10), count=3)
+        self.assertEqual(tokens, ["202605", "202604", "202603"])
+
+    def test_count_24_crosses_year_boundary(self) -> None:
+        tokens = month_tokens(date(2026, 5, 10), count=24)
+        self.assertEqual(len(tokens), 24)
+        self.assertEqual(tokens[0], "202605")
+        self.assertEqual(tokens[-1], "202406")  # 24 months ago = 2024-06
+        # 모두 unique + 내림차순
+        self.assertEqual(len(set(tokens)), 24)
+        self.assertEqual(tokens, sorted(tokens, reverse=True))
+
+
+class ParseArgsTest(unittest.TestCase):
+    def test_default_months_matches_default_constant(self) -> None:
+        ns = parse_args([])
+        self.assertEqual(ns.months, DEFAULT_MONTHS)
+
+    def test_explicit_months_override(self) -> None:
+        ns = parse_args(["--months", "24"])
+        self.assertEqual(ns.months, 24)
+
+    def test_max_months_accepted(self) -> None:
+        ns = parse_args(["--months", str(MAX_MONTHS)])
+        self.assertEqual(ns.months, MAX_MONTHS)
+
+    def test_zero_or_negative_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args(["--months", "0"])
+        with self.assertRaises(SystemExit):
+            parse_args(["--months", "-1"])
+
+    def test_above_max_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_args(["--months", str(MAX_MONTHS + 1)])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,33 @@
 
 ---
 
+## [Unreleased] - ETL 윈도우 옵션화 + 24개월 풀 재적재 (ADR-012)
+
+사이드패널 더보기를 풀자(v0.10.0) 강북 14구 raw에 4월 한 달 분포만 적재돼 "최근 3개월" 이상의 깊이가 안 보이던 문제. ETL fetch 윈도우를 가변 인자(`--months N`)로 분리하고 1회성 풀 재적재(24개월) 절차 정립.
+
+### 추가
+- `etl/fetch_rtms.py` `parse_args(argv)` — `argparse --months N` 옵션. default 3 유지(정기 cron 신고지연 보정), max 36, 0/-1/37 reject. 시작 log에 `ETL started: months=N (window YYYYMM~YYYYMM)` 명시.
+- `etl/tests/test_fetch_rtms.py` — `MonthTokensTest`(default·count=24 cross-year 검증), `ParseArgsTest`(default·explicit·max·zero·negative·overflow 5 케이스). `.venv-etl/bin/python3 -m unittest tests.test_fetch_rtms` 10/10 통과.
+- `SPEC.md` ADR-012 — ETL 윈도우 정책 (정기 3개월 + 1회성 24개월). MV 윈도우(ADR-005, 직전 3개월)와 raw fetch 윈도우를 명시적으로 분리.
+- `README.md` "풀 재적재" 섹션 — Neon 직결 1회 명령 + raw `ON CONFLICT DO NOTHING` 누적 + `mv_dong_stats` 영향 없음 명시.
+- `docs/til/2026-05-10-rtms-dev-key-quota-and-window.md` — RTMS Dev key 한도 확인 절차(공공데이터포털 마이페이지) + 호출량 추정 공식 + MV 윈도우 vs ETL fetch 윈도우 분리 교훈.
+
+### 결정
+- **`--months` 옵션 vs full-rebuild 전용 스크립트**: 별도 `rebuild_rtms.py` 만드는 대신 같은 진입점에 인자만 추가. 코드 경로 분기·테스트 표면 최소화. 정기 cron이 인자 없이 호출되면 default 3 그대로라 GHA 워크플로 변경 불필요.
+- **default 3 유지**: 정기 ETL은 신고지연 보정만 담당이라는 ADR-005 정신 보존. 풀 재적재 후에도 매일 `--months` 없이 호출 = 직전 3개월만 재조회.
+- **max 36**: RTMS Dev key 일일 한도(10,000) × 매매·전월세 분리 기준 호출량 추정으로 36개월(≈ 5,040 호출) 안전 여유. 그 이상은 분할 실행 필요해 옵션 자체 막음.
+- **`mv_dong_stats` 윈도우는 그대로**: raw 깊이가 늘어도 색칠지도 confidence 분류 안정성 유지(ADR-005). 통계 비교는 직전 3개월, "최근 거래" 깊이만 길어짐. 두 layer 분리는 ADR-012 trade-off의 핵심.
+
+### 검증
+- `tests.test_fetch_rtms` 10/10 통과 (parse_args 5 + month_tokens 2 + 기존 3).
+- 풀 재적재 1회 명령은 Mr. Song 환경에서 실행 필요(sandbox 네트워크 차단). 실행 후 검증 쿼리:
+  ```
+  SELECT to_char(contract_date,'YYYY-MM') ym, COUNT(*) FROM tx_apt_trade GROUP BY ym ORDER BY ym DESC;
+  ```
+  24개 월 모두 노출되면 성공. recent endpoint `offset=100/200` 다중 월 그룹 헤더 노출도 함께 확인.
+
+---
+
 ## [v0.10.0] - 2026-05-10 - 사이드패널 최근 거래 더보기 (인라인 점진 로드 + 월별 그룹 + 자체 스크롤)
 
 동 상세 사이드패널의 매매·전세 최근 거래가 각각 10건 고정이었던 걸 +20건씩 누적 로드되도록 풀었다. 사용자가 거래 흐름을 더 깊이 보고 싶을 때 모달이나 페이지 이동 없이 같은 자리에서 펼친다. 누적 시 스크롤 감당이 길어지는 문제는 월별 그룹 헤더(sticky) + 매매·전세 각 섹션 자체 스크롤 컨테이너(max 320px)로 해결.
