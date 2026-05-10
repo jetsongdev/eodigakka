@@ -22,7 +22,7 @@ async function fetchRecent(
   offset: number,
   limitPlusOne: number,
 ): Promise<RecentTxRow[]> {
-  'use cache';
+  'use cache: remote';
   cacheLife({ revalidate: 3600 });
   cacheTag('mv_dong_stats', `recent-${bjd}-${mode}-${offset}-${limitPlusOne}`);
 

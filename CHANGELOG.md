@@ -10,6 +10,42 @@
 
 ---
 
+## [v0.11.1] - 2026-05-10 - 'use cache' → 'use cache: remote' (Stage 2b cache 미작동 수정)
+
+Stage 2b(v0.8.4)에서 `'use cache'` directive를 박았는데 Production 측정 결과 캐시가 전혀 작동 안 함. `_timing` 값이 매 호출마다 바뀌고 `generated_at`도 갱신됨. `/api/affordable` cold 3.55s, warm 695ms. `/api/dong/[bjd]/complexes` cold 1.88s, warm 470ms.
+
+원인: Vercel Next.js 16 공식 문서상 `'use cache'`(default profile)는 **in-memory only, ephemeral per instance**. Vercel serverless instance가 invocation마다 다를 수 있어 캐시 매번 miss. `'use cache: remote'`라야 Vercel Runtime Cache(persistent regional KV)에 저장돼 invocation/instance 간 공유.
+
+폴리곤이 작동했던 이유 — `Cache-Control: public, max-age=86400` 응답 헤더로 **CDN 캐시**가 따로 작동 (`x-vercel-cache: HIT`). `'use cache'` directive와 무관한 별개 layer.
+
+### 수정
+- `web/app/api/affordable/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/dong/[bjd]/complexes/route.ts` — `'use cache'` → `'use cache: remote'`
+- `web/app/api/dong/[bjd]/recent/route.ts` — `'use cache'` → `'use cache: remote'` (origin/main 머지 시 v0.10.0의 신규 endpoint도 같은 함정에 노출. 일관성 적용)
+- `web/app/api/revalidate/route.ts` — `revalidateTag(tag, 'default')` → `revalidateTag(tag, { expire: 0 })` (webhook 외부 트리거는 즉시 만료가 권장 패턴)
+
+### 추가
+- `docs/til/2026-05-10-vercel-use-cache-vs-remote.md` — `'use cache'` vs `'use cache: remote'` Vercel serverless 함정
+- `docs/blog/2026-05-10-vercel-use-cache-remote-trap.md` — 같은 함정 블로그 draft (정글 실험실 후보)
+- `docs/blog/2026-05-10-vercel-preview-bypass-1password-cli.md` — Preview Vercel Auth 우회용 Protection Bypass for Automation 토큰 + 1Password CLI 패턴 블로그 draft
+
+### 변경
+- `CLAUDE.md` 「검증 체크리스트」 — Preview에서 bypass 토큰으로 curl 자동화 검증 절차 명시 (1Password vault 경로, GH Secret 동기화 명령, cache 작동 5회 호출 회귀 가드)
+- `tasks.md` F.117 — `[-]` 취소 → `[x]` 완료. 옵션 C(Auth 유지) + 옵션 D(Bypass 토큰) 조합 채택. 토큰 발급 + 1Password 저장 + GH Secret(`VERCEL_AUTOMATION_BYPASS`) 동기화 완료
+
+### 검증 (PR #23 Preview)
+- `_timing` 5회 정확히 동일 — `/api/affordable`(stats=1931.4 fresh=1633.8 db=1931.4) + `/api/dong/.../complexes`(db=1608.9) → cache HIT 확정
+- Wall-clock cold/warm 8 mode×size 조합 + 4개 동 측정 — warm 모두 0.24~0.26s 안정 수렴
+- `/api/polygons` `x-vercel-cache: HIT` 정상
+- `/api/revalidate` 401 가드 3 case 통과: bypass 없음(Vercel Auth) / bypass 있음 + Auth 없음(route 401) / bypass 있음 + 잘못된 Bearer(route 401)
+
+### 결정
+- 폴리곤은 `'use cache'` 그대로 유지 — `Cache-Control: public, max-age=86400` 헤더로 CDN 캐시가 작동 중이라 변경 불필요
+- `{ expire: 0 }` 선택 이유 — ETL 03:00 webhook이 즉시 invalidate해야 다음 사용자가 새 데이터 받음. `'default'`(stale-while-revalidate)면 03:01 첫 사용자가 stale 받음
+- Preview 자동화는 Auth 끄기(옵션 A) 대신 Bypass 토큰(옵션 D) — Mapbox preview 토큰 abuse 위험 회피하면서 머신 검증 가능
+
+---
+
 ## [v0.11.0] - 2026-05-10 - ETL 윈도우 옵션화 + 24개월 풀 재적재 (ADR-012)
 
 사이드패널 더보기를 풀자(v0.10.0) 강북 14구 raw에 4월 한 달 분포만 적재돼 "최근 3개월" 이상의 깊이가 안 보이던 문제. ETL fetch 윈도우를 가변 인자(`--months N`)로 분리하고 1회성 풀 재적재(24개월) 절차 정립.
@@ -78,6 +114,8 @@ PWA 상태(`mode`, `cash_min`, `cash_max`, `size`)를 URL search params에 반�
 
 ### 검증
 브라우저에서 `?mode=jeonse&cash_min=10000&cash_max=30000&size=S`로 진입 → 전세 활성·슬라이더 [10000,30000]·S 활성 확인. 매매/M 토글 + 슬라이더 ArrowRight 8회 후 `history.length` 2로 고정 확인. `npm run build` TS 1248ms 통과.
+
+---
 
 ## [v0.8.4] - 2026-05-10 - perf(web): Cache Components 도입 + ETL→/api/revalidate webhook (Stage 2b)
 

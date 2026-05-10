@@ -115,7 +115,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
   - **Mapbox eodigakka-prod**: 커스텀 도메인 연결 시 Mapbox 콘솔 URL restriction에 새 도메인 화이트리스트 추가 필수.
 - [ ] (장기) Mapbox 토큰 회전 정책 — 6개월에 1회 재발급 + Vercel env 갱신
 - [x] 면책 고지 + 데이터 출처가 SEO/소셜 카드에 노출 (2026-05-05) — `app/layout.tsx`에 `description` + `openGraph` + `twitter` metadata 추가 (PR #2)
-- [-] **Preview deployment protection** (2026-05-10 옵션 C 채택, 취소) — 분석 결과 옵션 A(Vercel Auth 끄기)는 Mapbox preview 토큰 abuse 위험. Preview 토큰은 unrestricted(default)인데 Mapbox URL restriction wildcard 미지원이라 `*.vercel.app` 화이트리스트 불가. Preview URL 공개 시 DevTools에서 토큰 수확 → 다른 도메인에서 quota 소진·청구 가능. 옵션 B는 OG crawler가 임의 header 첨부 불가라 사실상 GHA 자동화 외엔 의미 없음. 결론: 옵션 C(그대로 두고 Production에서만 OG 검증) — 외부 공유 가치 적은 현 단계에 충분. 외부 공유 시점 임박할 때 재평가.
+- [x] **Preview deployment protection** (2026-05-10 옵션 C 채택 + 옵션 D 추가) — Auth 유지(옵션 C, 외부 공유 가치 적은 현 단계 충분)하면서 자동화 검증은 **Protection Bypass for Automation 토큰**(옵션 D)으로 우회. 1Password vault `side-project / eodigakka / vercel-bypass`에 발급 + GH Secret `VERCEL_AUTOMATION_BYPASS` 동기화 완료. 옵션 A(Auth 끄기)는 Mapbox preview 토큰 abuse 위험으로 여전히 취소(URL restriction wildcard 미지원, Preview URL 공개 시 DevTools에서 토큰 수확 → 다른 도메인에서 quota 소진 위험). Preview에서 curl·Playwright·Lighthouse 등 모든 자동화 검증 가능 — 사용법은 CLAUDE.md 「검증 체크리스트」 섹션. 외부 공유 시점 임박할 때 옵션 A 재평가는 별개.
 
 ### G. 사용자 피드백 채널 (2026-05-05 신규)
 
@@ -167,7 +167,7 @@ draft 누적 중. 외부 게시 시점에 `status: draft → review → publishe
 - [x] **A 진단 완료** (2026-05-09) — Production 첫 호출 **3.46s** (Server-Timing stats=1788.8 fresh=1572.4 db=1788.8). warm 680ms 별도 측정. 가설 A(Neon 콜드 dominant) **부분 확정** — cold 1.3s + warm 자체 700ms도 무시 못 함. 결론: D(edge cache) + E(인덱스) 둘 다 가치
 - [x] **E 진단 완료** (2026-05-10, Stage 1) — `EXPLAIN ANALYZE SELECT MAX(contract_date) FROM tx_apt_trade` **Seq Scan** 확정 (local Docker 5456 rows, 3ms). 기존 `(bjd_code, contract_date)` 복합 인덱스의 leading column이 `bjd_code`라 `MAX` 단독엔 활용 안 됨 (advisor 가설 정확). Stage 2에서 (a) 단일 `contract_date` 인덱스 vs (b) `etl_job_status.last_contract_date` 컬럼화 결정 — (b)가 raw 인덱스 추가 없이 1행 SELECT라 더 깔끔
 - [x] **C 적용 (Stage 2a PR)** (2026-05-10) — freshness 쿼리 raw `MAX(contract_date)` Seq Scan → `etl_job_status` 1행 PK lookup. 옵션 (b) 채택. ETL이 03:00 갱신 후 max 박음, ALTER IF NOT EXISTS로 운영 DB 자동 마이그레이션. 로컬 검증: warm fresh **1572ms → 1.7ms (1000배 ↓)**. Production 측정은 deploy 후
-- [ ] **D 적용 (Stage 2b PR)** — affordable 응답 자체 edge cache. `'use cache'` directive + `cacheLife({ revalidate: 3600 })` + `cacheTag('mv_dong_stats')` + ETL 갱신 후 Next.js `/api/revalidate?tag=mv_dong_stats&secret=...` POST. Stage 2a deploy 후 cold latency 측정 → D가 추가로 필요한지 판단
+- [~] **D 적용 (Stage 2b PR #22, 2026-05-10)** — affordable·complexes에 `'use cache'` + `cacheTag('mv_dong_stats')` + `/api/revalidate` webhook + ETL workflow 통합. Production 측정 결과 **cache 미작동** (call마다 `_timing` 변동, `generated_at` 갱신, DB 매번 hit). 원인: `'use cache'` (default profile)는 Vercel serverless에서 in-memory only · ephemeral per instance — `'use cache: remote'`라야 Vercel Runtime Cache(persistent regional KV)에 저장됨. 폴리곤이 작동했던 건 `'use cache'` 덕분이 아니라 응답 헤더 `Cache-Control: public, max-age=86400`로 CDN edge cache가 잡아준 덕(`x-vercel-cache: HIT` 확인). 후속 PR(`fix/use-cache-remote`) 진행 중 — `'use cache'` → `'use cache: remote'` 3개 directive + `revalidateTag(tag, 'default')` → `revalidateTag(tag, { expire: 0 })` (webhook 권장 패턴). TIL `2026-05-10-vercel-use-cache-vs-remote.md`
 
 ### I. `/api/polygons` 응답 캐시·페이로드 축소 (2026-05-09 신규, **🚨 CRITICAL**)
 

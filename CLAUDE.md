@@ -276,11 +276,25 @@ DB 테이블·MV의 TS 타입 정의 + 글로벌 싱글톤 connection pool. 새 
 
 ### 검증 체크리스트 (Preview URL에서)
 
+Preview는 Vercel Deployment Protection 켜진 상태(F.117 옵션 C). curl로 그냥 때리면 401 → **Protection Bypass for Automation 토큰** 사용.
+
+토큰 보관: 1Password vault `side-project / eodigakka / vercel-bypass`. GH Secret도 동일 값(`VERCEL_AUTOMATION_BYPASS`)으로 동기화돼 있음(2026-05-10 셋업).
+
+```bash
+PREVIEW="https://eodigakka-git-<branch>-jetsongdev.vercel.app"
+BYPASS=$(op read 'op://side-project/eodigakka/vercel-bypass')
+curl -H "x-vercel-protection-bypass: $BYPASS" "$PREVIEW/api/health"
+```
+
+체크리스트:
 - `/api/health` 200 + `etl_disabled: false` + ETL last_succeeded_at 합리적
-- `/api/polygons` features 467개
+- `/api/polygons` features 467개 (`x-vercel-cache: HIT` 두 번째 호출부터)
 - `/api/affordable?mode=trade&...` dongs 비어있지 않음
-- 페이지 로드 → LoadingOverlay → 지도 + 폴리곤 색칠
+- **cache 작동 검증**: 같은 params로 5회 연속 호출 → `_timing` 5번 모두 동일하면 cache HIT (수정 후), 변동하면 MISS. `'use cache: remote'` 회귀 가드 (2026-05-10 PR #23 함정)
+- 페이지 로드 → LoadingOverlay → 지도 + 폴리곤 색칠 (브라우저는 Vercel SSO 로그인 1회 필요, 또는 bypass 쿠키)
 - 푸터 버전(`vX.Y.Z #<sha>`) 새 commit 반영 확인 (Production은 bump 후 재빌드 통해 갱신)
+
+토큰 회전: `op item edit "Vercel eodigakka Bypass" credential="<new>"` + `gh secret set VERCEL_AUTOMATION_BYPASS --body "$(op read '...')"`. Vercel Dashboard에서 기존 토큰 revoke까지 해야 회전 완료.
 
 ### Telegram 알림 검증
 
